@@ -23,7 +23,10 @@ env/
 Thumbs.db
 
 # Training outputs and model artifacts
-artifacts/
+artifacts/*
+!artifacts/evaluation/
+artifacts/evaluation/*
+!artifacts/evaluation/misclassified_examples.png
 checkpoints/
 logs/
 *.keras
