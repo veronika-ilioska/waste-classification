@@ -206,6 +206,7 @@ def load_datasets(
 
     options = tf.data.Options()
     options.experimental_deterministic = False
+
     train_ds = train_ds.with_options(options).prefetch(tf.data.AUTOTUNE)
     val_ds = val_ds.prefetch(tf.data.AUTOTUNE)
     test_ds = test_ds.prefetch(tf.data.AUTOTUNE)
