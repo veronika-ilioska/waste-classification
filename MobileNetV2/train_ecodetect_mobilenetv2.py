@@ -19,7 +19,7 @@ import yaml
 from sklearn.metrics import classification_report, confusion_matrix
 
 
-DEFAULT_CONFIG_PATH = Path("config.yaml")
+DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.yaml")
 BACKGROUND_CLASS = "background"
 SPLITS = ("train", "valid", "test")
 
@@ -29,6 +29,7 @@ class Config:
     dataset_handle: str
     dataset_dir: Path | None
     output_dir: Path
+    model_name: str
     image_size: tuple[int, int]
     image_extensions: frozenset[str]
     batch_size: int
@@ -99,6 +100,7 @@ def load_config(config_path: Path = DEFAULT_CONFIG_PATH) -> Config:
         ),
         dataset_dir=config_path_value(dataset.get("dir")),
         output_dir=Path(str(output.get("dir", "artifacts/ecodetect"))),
+        model_name=str(model.get("name", "mobilenetv2")),
         image_size=(
             int(model.get("image_height", 224)),
             int(model.get("image_width", 224)),
@@ -136,7 +138,7 @@ def parse_config_path() -> Path:
 def parse_args(config: Config, config_path: Path) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Train MobileNetV2 on the EcoDetect YOLO dataset by converting "
+            "Train a Keras image classifier on the EcoDetect YOLO dataset by converting "
             "image annotations into image-level labels."
         )
     )
@@ -157,7 +159,7 @@ def parse_args(config: Config, config_path: Path) -> argparse.Namespace:
         "--fine-tune-layers",
         type=int,
         default=config.fine_tune_layers,
-        help="Number of final MobileNetV2 layers to unfreeze.",
+        help="Number of final base-model layers to unfreeze.",
     )
     parser.add_argument("--learning-rate", type=float, default=config.learning_rate)
     parser.add_argument(
@@ -760,6 +762,7 @@ def main() -> None:
     )
     class_weights = calculate_class_weights(class_counts)
     print(f"Dataset root: {dataset_dir}")
+    print(f"Model: {config.model_name}")
     print(f"Classes: {class_names}")
     print(f"Training subset counts: {dict(zip(class_names, class_counts.tolist()))}")
     if BACKGROUND_CLASS not in class_names:

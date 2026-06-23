@@ -9,9 +9,10 @@ dataset:
     - .png
 
 output:
-  dir: artifacts/ecodetect
+  dir: artifacts/ecodetect/mobilenetv2
 
 model:
+  name: mobilenetv2
   image_width: 224
   image_height: 224
   use_imagenet_weights: true

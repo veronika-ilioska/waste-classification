@@ -60,7 +60,7 @@ automatically.
 ## Training
 
 ```powershell
-.\.venv\Scripts\python.exe train_mobilenetv2.py
+.\.venv\Scripts\python.exe MobileNetV2\train_mobilenetv2.py
 ```
 
 Training produces the following files under `artifacts/`:
@@ -76,7 +76,7 @@ Training produces the following files under `artifacts/`:
 ## Evaluation
 
 ```powershell
-.\.venv\Scripts\python.exe evaluate_mobilenetv2.py
+.\.venv\Scripts\python.exe MobileNetV2\evaluate_mobilenetv2.py
 ```
 
 Evaluation outputs are written to `artifacts/evaluation/`:
@@ -85,3 +85,27 @@ Evaluation outputs are written to `artifacts/evaluation/`:
 - Raw and normalized confusion-matrix images
 - Predictions for every test image in CSV format
 - A gallery of the most confident misclassifications
+
+## EcoDetect MobileNetV2
+
+The EcoDetect dataset is YOLO-formatted, so
+`MobileNetV2/train_ecodetect_mobilenetv2.py` converts each image's bounding-box
+annotations into one image-level class before training a MobileNetV2 classifier.
+If an image has multiple object classes, the largest bounding box decides the
+image label.
+
+Run a smoke check:
+
+```powershell
+.\.venv\Scripts\python.exe MobileNetV2\train_ecodetect_mobilenetv2.py --check-only
+```
+
+Train the model:
+
+```powershell
+.\.venv\Scripts\python.exe MobileNetV2\train_ecodetect_mobilenetv2.py
+```
+
+The EcoDetect run saves the model, TensorFlow Lite export, training curves,
+classification report, confusion matrices, predictions CSV, and misclassified
+example gallery under `artifacts/ecodetect/mobilenetv2`.
