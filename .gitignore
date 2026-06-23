@@ -26,7 +26,14 @@ Thumbs.db
 artifacts/*
 !artifacts/evaluation/
 artifacts/evaluation/*
+!artifacts/evaluation/confusion_matrix.png
+!artifacts/evaluation/confusion_matrix_normalized.png
 !artifacts/evaluation/misclassified_examples.png
+!artifacts/ecodetect/
+!artifacts/ecodetect/mobilenetv2/
+!artifacts/ecodetect/mobilenetv2/confusion_matrix.png
+!artifacts/ecodetect/mobilenetv2/confusion_matrix_normalized.png
+!artifacts/ecodetect/mobilenetv2/misclassified_examples.png
 checkpoints/
 logs/
 *.keras
