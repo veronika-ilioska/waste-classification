@@ -109,3 +109,22 @@ Train the model:
 The EcoDetect run saves the model, TensorFlow Lite export, training curves,
 classification report, confusion matrices, predictions CSV, and misclassified
 example gallery under `artifacts/ecodetect/mobilenetv2`.
+
+## EcoDetect MobileNetV3
+
+`MobileNetV3/train_ecodetect_mobilenetv3.py` uses the same EcoDetect
+classification pipeline with a MobileNetV3Small backbone.
+
+Run a smoke check:
+
+```powershell
+.\.venv\Scripts\python.exe MobileNetV3\train_ecodetect_mobilenetv3.py --check-only
+```
+
+Train and evaluate MobileNetV3:
+
+```powershell
+.\.venv\Scripts\python.exe MobileNetV3\train_ecodetect_mobilenetv3.py
+```
+
+Outputs are saved under `artifacts/ecodetect/mobilenetv3`.
