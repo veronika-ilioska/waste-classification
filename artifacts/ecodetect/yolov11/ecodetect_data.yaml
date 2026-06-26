@@ -1,0 +1,9 @@
+path: /root/.cache/kagglehub/datasets/ahsan71/ecodetect-recyclable-waste-detection-dataset/versions/5
+train: /root/.cache/kagglehub/datasets/ahsan71/ecodetect-recyclable-waste-detection-dataset/versions/5/train/images
+val: /root/.cache/kagglehub/datasets/ahsan71/ecodetect-recyclable-waste-detection-dataset/versions/5/valid/images
+test: /root/.cache/kagglehub/datasets/ahsan71/ecodetect-recyclable-waste-detection-dataset/versions/5/test/images
+nc: 3
+names:
+- aluminum
+- paper
+- plastic

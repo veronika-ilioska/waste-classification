@@ -1,0 +1,28 @@
+{
+  "dataset_dir": "/root/.cache/kagglehub/datasets/ahsan71/ecodetect-recyclable-waste-detection-dataset/versions/5",
+  "data_yaml": "artifacts/ecodetect/yolov11/train/ecodetect_data.yaml",
+  "train_save_dir": "/content/waste-classification/runs/detect/artifacts/ecodetect/yolov11/train",
+  "eval_save_dir": "/content/waste-classification/runs/detect/artifacts/ecodetect/yolov11/train_test",
+  "best_weights": "/content/waste-classification/runs/detect/artifacts/ecodetect/yolov11/train/weights/best.pt",
+  "counts": {
+    "train": {
+      "images": 1750,
+      "labels": 1750
+    },
+    "valid": {
+      "images": 75,
+      "labels": 75
+    },
+    "test": {
+      "images": 75,
+      "labels": 75
+    }
+  },
+  "metrics": {
+    "map50_95": 0.3347148961322184,
+    "map50": 0.46743815840463626,
+    "map75": 0.4001055623829095,
+    "mean_precision": 0.3763434580905814,
+    "mean_recall": 0.5939726073102781
+  }
+}
