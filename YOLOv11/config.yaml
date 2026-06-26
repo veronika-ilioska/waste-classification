@@ -1,0 +1,24 @@
+dataset:
+  handle: ahsan71/ecodetect-recyclable-waste-detection-dataset
+  dir:
+
+output:
+  project: artifacts/ecodetect/yolov11
+  name: train
+
+model:
+  weights: yolo11n.pt
+
+training:
+  epochs: 50
+  image_size: 640
+  batch_size: 16
+  device: 0
+  workers: 2
+  seed: 42
+  patience: 20
+
+evaluation:
+  split: test
+  save_json: true
+  save_confusion_matrix: true

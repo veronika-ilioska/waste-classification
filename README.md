@@ -128,3 +128,26 @@ Train and evaluate MobileNetV3:
 ```
 
 Outputs are saved under `artifacts/ecodetect/mobilenetv3`.
+
+## EcoDetect YOLOv11
+
+`YOLOv11/train_ecodetect_yolov11.py` trains object detection directly on the
+EcoDetect YOLO labels. It prepares a local `data.yaml` with correct paths, then
+uses Ultralytics YOLOv11.
+
+Run a smoke check:
+
+```powershell
+.\.venv\Scripts\python.exe YOLOv11\train_ecodetect_yolov11.py --check-only
+```
+
+Train and evaluate YOLOv11:
+
+```powershell
+.\.venv\Scripts\python.exe YOLOv11\train_ecodetect_yolov11.py
+```
+
+Outputs are saved under `artifacts/ecodetect/yolov11/train`, and test
+evaluation outputs are saved under `artifacts/ecodetect/yolov11/train_test`.
+Ultralytics writes plots such as `results.png`, `confusion_matrix.png`, and
+`confusion_matrix_normalized.png` in those run folders.
