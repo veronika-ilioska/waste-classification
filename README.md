@@ -151,3 +151,55 @@ Outputs are saved under `artifacts/ecodetect/yolov11/train`, and test
 evaluation outputs are saved under `artifacts/ecodetect/yolov11/train_test`.
 Ultralytics writes plots such as `results.png`, `confusion_matrix.png`, and
 `confusion_matrix_normalized.png` in those run folders.
+
+## EcoDetect Model Comparison
+
+The EcoDetect experiments compare two image-level classifiers and one object
+detector on the same dataset split. MobileNetV2 and MobileNetV3 convert each
+YOLO image into a single class label using the largest bounding box, so their
+main metric is classification accuracy. YOLOv11 keeps the original bounding-box
+labels, so its main metrics are detection precision, recall, and mAP.
+
+| Model | Task | Test images | Main result | Notes |
+|---|---|---:|---:|---|
+| MobileNetV2 | Image classification | 75 | 69.33% accuracy | Best classifier in this run; weighted F1-score was 0.69. |
+| MobileNetV3Small | Image classification | 75 | 40.00% accuracy | Underperformed MobileNetV2; weighted F1-score was 0.42. |
+| YOLOv11 | Object detection | 75 | 46.74% mAP50 | Mean precision was 37.63%, mean recall was 59.40%, and mAP50-95 was 33.47%. |
+
+### Training and Evaluation Artifacts
+
+| Model | Training curves | Confusion matrix | Extra evaluation outputs |
+|---|---|---|---|
+| MobileNetV2 | [`training_curves.png`](artifacts/ecodetect/mobilenetv2/training_curves.png) | [`confusion_matrix.png`](artifacts/ecodetect/mobilenetv2/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/mobilenetv2/confusion_matrix_normalized.png) | [`misclassified_examples.png`](artifacts/ecodetect/mobilenetv2/misclassified_examples.png), [`classification_report.txt`](artifacts/ecodetect/mobilenetv2/classification_report.txt), [`predictions.csv`](artifacts/ecodetect/mobilenetv2/predictions.csv) |
+| MobileNetV3Small | [`training_curves.png`](artifacts/ecodetect/mobilenetv3/training_curves.png) | [`confusion_matrix.png`](artifacts/ecodetect/mobilenetv3/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/mobilenetv3/confusion_matrix_normalized.png) | [`misclassified_examples.png`](artifacts/ecodetect/mobilenetv3/misclassified_examples.png), [`classification_report.txt`](artifacts/ecodetect/mobilenetv3/classification_report.txt), [`predictions.csv`](artifacts/ecodetect/mobilenetv3/predictions.csv) |
+| YOLOv11 | [`results.png`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train/results.png), [`results.csv`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train/results.csv) | [`confusion_matrix.png`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/confusion_matrix_normalized.png) | [`BoxPR_curve.png`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/BoxPR_curve.png), [`BoxF1_curve.png`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/BoxF1_curve.png), [`val_batch0_pred.jpg`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/val_batch0_pred.jpg) |
+
+#### MobileNetV2 Training Curves
+
+![MobileNetV2 EcoDetect training curves](artifacts/ecodetect/mobilenetv2/training_curves.png)
+
+#### MobileNetV3Small Training Curves
+
+![MobileNetV3Small EcoDetect training curves](artifacts/ecodetect/mobilenetv3/training_curves.png)
+
+#### YOLOv11 Training Curves
+
+![YOLOv11 EcoDetect training results](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train/results.png)
+
+#### YOLOv11 Precision-Recall Curve
+
+![YOLOv11 EcoDetect precision-recall curve](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/BoxPR_curve.png)
+
+MobileNetV2 performed best for simple image-level waste classification on this
+EcoDetect run. It was strongest on `plastic` and `paper`, but still struggled
+with `aluminum`, where only 4 of 9 test images were classified correctly.
+MobileNetV3Small did not learn the split as well, especially for `paper` and
+`plastic`, and is not the recommended classifier based on the saved results.
+
+YOLOv11 solves a harder problem because it must localize waste objects as well
+as classify them. Its recall was higher than its precision, meaning it found a
+reasonable number of objects but produced more false positives. Use YOLOv11
+when bounding boxes or object localization are required; use MobileNetV2 when
+the goal is only to assign one waste class to each image. For production use,
+the test set is small, so the next step should be to evaluate on a larger
+held-out set and add more examples for the weaker classes.
