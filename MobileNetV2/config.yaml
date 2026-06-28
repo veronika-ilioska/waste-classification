@@ -26,6 +26,9 @@ training:
   learning_rate: 0.001
   fine_tune_learning_rate: 0.00001
   seed: 42
+  class_weight_multipliers:
+    aluminum: 1.5
+  focal_loss_gamma: 0.0
 
 augmentation:
   random_rotation: 0.08

@@ -110,6 +110,13 @@ The EcoDetect run saves the model, TensorFlow Lite export, training curves,
 classification report, confusion matrices, predictions CSV, and misclassified
 example gallery under `artifacts/ecodetect/mobilenetv2`.
 
+The MobileNetV2 EcoDetect pipeline supports extra imbalance controls under
+`training.class_weight_multipliers`. The current config applies an additional
+`1.5x` multiplier to `aluminum` after inverse-frequency class weighting, raising
+the training weight for aluminum from `1.9444` to `2.9167`. The script also
+supports optional focal loss through `training.focal_loss_gamma`; it is disabled
+by default because the saved focal-loss experiment reduced test performance.
+
 ## EcoDetect MobileNetV3
 
 `MobileNetV3/train_ecodetect_mobilenetv3.py` uses the same EcoDetect
@@ -128,6 +135,26 @@ Train and evaluate MobileNetV3:
 ```
 
 Outputs are saved under `artifacts/ecodetect/mobilenetv3`.
+
+## EcoDetect MobileNetV4
+
+`MobileNetV4/train_ecodetect_mobilenetv4.py` trains a MobileNetV4 classifier
+through PyTorch and `timm`, using the same largest-bounding-box image label
+conversion as the MobileNetV2 and MobileNetV3 pipelines.
+
+Run a smoke check:
+
+```powershell
+.\.venv\Scripts\python.exe MobileNetV4\train_ecodetect_mobilenetv4.py --check-only
+```
+
+Train and evaluate MobileNetV4:
+
+```powershell
+.\.venv\Scripts\python.exe MobileNetV4\train_ecodetect_mobilenetv4.py
+```
+
+Outputs are saved under `artifacts/ecodetect/mobilenetv4`.
 
 ## EcoDetect YOLOv11
 
@@ -164,7 +191,27 @@ labels, so its main metrics are detection precision, recall, and mAP.
 |---|---|---:|---:|---|
 | MobileNetV2 | Image classification | 75 | 69.33% accuracy | Best classifier in this run; weighted F1-score was 0.69. |
 | MobileNetV3Small | Image classification | 75 | 40.00% accuracy | Underperformed MobileNetV2; weighted F1-score was 0.42. |
+| MobileNetV4 Conv Small | Image classification | 75 | 48.00% accuracy | Better aluminum recall than MobileNetV2, but much lower overall accuracy; weighted F1-score was 0.50. |
 | YOLOv11 | Object detection | 75 | 46.74% mAP50 | Mean precision was 37.63%, mean recall was 59.40%, and mAP50-95 was 33.47%. |
+
+### MobileNetV2 Aluminum Imbalance Check
+
+MobileNetV2 remained the strongest EcoDetect classifier, so it was retrained
+with stronger aluminum weighting. The safer class-weight multiplier run kept
+overall accuracy and weighted F1 essentially unchanged, but did not improve
+aluminum precision or recall. A focal-loss follow-up run was also saved for
+comparison, but it hurt aluminum precision and overall accuracy.
+
+| Run | Aluminum handling | Aluminum precision | Aluminum recall | Accuracy | Weighted F1 |
+|---|---|---:|---:|---:|---:|
+| Baseline MobileNetV2 | inverse-frequency class weights | 0.50 | 0.44 | 0.6933 | 0.6913 |
+| Aluminum multiplier | aluminum class weight `1.5x` after balancing | 0.50 | 0.44 | 0.6933 | 0.6915 |
+| Aluminum multiplier + focal loss | aluminum class weight `1.5x`, focal gamma `1.5` | 0.33 | 0.44 | 0.6667 | 0.6732 |
+
+Artifacts for the safer retrain are under
+[`artifacts/ecodetect/mobilenetv2_aluminum_balanced`](artifacts/ecodetect/mobilenetv2_aluminum_balanced),
+and the focal-loss experiment is under
+[`artifacts/ecodetect/mobilenetv2_aluminum_focal`](artifacts/ecodetect/mobilenetv2_aluminum_focal).
 
 ### Training and Evaluation Artifacts
 
@@ -172,6 +219,7 @@ labels, so its main metrics are detection precision, recall, and mAP.
 |---|---|---|---|
 | MobileNetV2 | [`training_curves.png`](artifacts/ecodetect/mobilenetv2/training_curves.png) | [`confusion_matrix.png`](artifacts/ecodetect/mobilenetv2/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/mobilenetv2/confusion_matrix_normalized.png) | [`misclassified_examples.png`](artifacts/ecodetect/mobilenetv2/misclassified_examples.png), [`classification_report.txt`](artifacts/ecodetect/mobilenetv2/classification_report.txt), [`predictions.csv`](artifacts/ecodetect/mobilenetv2/predictions.csv) |
 | MobileNetV3Small | [`training_curves.png`](artifacts/ecodetect/mobilenetv3/training_curves.png) | [`confusion_matrix.png`](artifacts/ecodetect/mobilenetv3/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/mobilenetv3/confusion_matrix_normalized.png) | [`misclassified_examples.png`](artifacts/ecodetect/mobilenetv3/misclassified_examples.png), [`classification_report.txt`](artifacts/ecodetect/mobilenetv3/classification_report.txt), [`predictions.csv`](artifacts/ecodetect/mobilenetv3/predictions.csv) |
+| MobileNetV4 Conv Small | [`training_curves.png`](artifacts/ecodetect/mobilenetv4/training_curves.png) | [`confusion_matrix.png`](artifacts/ecodetect/mobilenetv4/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/mobilenetv4/confusion_matrix_normalized.png) | [`misclassified_examples.png`](artifacts/ecodetect/mobilenetv4/misclassified_examples.png), [`classification_report.txt`](artifacts/ecodetect/mobilenetv4/classification_report.txt), [`predictions.csv`](artifacts/ecodetect/mobilenetv4/predictions.csv) |
 | YOLOv11 | [`results.png`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train/results.png), [`results.csv`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train/results.csv) | [`confusion_matrix.png`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/confusion_matrix_normalized.png) | [`BoxPR_curve.png`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/BoxPR_curve.png), [`BoxF1_curve.png`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/BoxF1_curve.png), [`val_batch0_pred.jpg`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/val_batch0_pred.jpg) |
 
 #### MobileNetV2 Training Curves
@@ -181,6 +229,10 @@ labels, so its main metrics are detection precision, recall, and mAP.
 #### MobileNetV3Small Training Curves
 
 ![MobileNetV3Small EcoDetect training curves](artifacts/ecodetect/mobilenetv3/training_curves.png)
+
+#### MobileNetV4 Conv Small Training Curves
+
+![MobileNetV4 Conv Small EcoDetect training curves](artifacts/ecodetect/mobilenetv4/training_curves.png)
 
 #### YOLOv11 Training Curves
 
@@ -195,6 +247,9 @@ EcoDetect run. It was strongest on `plastic` and `paper`, but still struggled
 with `aluminum`, where only 4 of 9 test images were classified correctly.
 MobileNetV3Small did not learn the split as well, especially for `paper` and
 `plastic`, and is not the recommended classifier based on the saved results.
+MobileNetV4 Conv Small improved aluminum recall to 5 of 9 test images, but did
+so by over-predicting aluminum and dropping overall accuracy to 48.00%, so it is
+also not recommended over MobileNetV2 for image-level classification.
 
 YOLOv11 solves a harder problem because it must localize waste objects as well
 as classify them. Its recall was higher than its precision, meaning it found a

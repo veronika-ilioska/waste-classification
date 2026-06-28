@@ -39,6 +39,8 @@ class Config:
     learning_rate: float
     fine_tune_learning_rate: float
     seed: int
+    class_weight_multipliers: dict[str, float]
+    focal_loss_gamma: float
     use_imagenet_weights: bool
     random_rotation: float
     random_zoom: float
@@ -115,6 +117,13 @@ def load_config(config_path: Path = DEFAULT_CONFIG_PATH) -> Config:
         learning_rate=float(training.get("learning_rate", 0.001)),
         fine_tune_learning_rate=float(training.get("fine_tune_learning_rate", 0.00001)),
         seed=int(training.get("seed", 42)),
+        class_weight_multipliers={
+            str(class_name): float(multiplier)
+            for class_name, multiplier in training.get(
+                "class_weight_multipliers", {}
+            ).items()
+        },
+        focal_loss_gamma=float(training.get("focal_loss_gamma", 0.0)),
         use_imagenet_weights=bool(model.get("use_imagenet_weights", True)),
         random_rotation=float(augmentation.get("random_rotation", 0.08)),
         random_zoom=float(augmentation.get("random_zoom", 0.1)),
@@ -434,14 +443,48 @@ def load_datasets(
     return train_ds, val_ds, test_ds, class_names, train_counts, test_paths, test_labels
 
 
-def calculate_class_weights(class_counts: np.ndarray) -> dict[int, float]:
+def calculate_class_weights(
+    class_counts: np.ndarray,
+    class_names: list[str],
+    class_weight_multipliers: dict[str, float],
+) -> dict[int, float]:
     if np.any(class_counts == 0):
         raise ValueError(f"At least one class has no training images: {class_counts}")
     total = int(class_counts.sum())
     return {
-        index: total / (len(class_counts) * int(count))
+        index: (total / (len(class_counts) * int(count)))
+        * class_weight_multipliers.get(class_name, 1.0)
         for index, count in enumerate(class_counts)
+        for class_name in [class_names[index]]
     }
+
+
+@tf.keras.utils.register_keras_serializable(package="EcoDetect")
+class SparseCategoricalFocalCrossentropy(tf.keras.losses.Loss):
+    def __init__(
+        self,
+        gamma: float = 2.0,
+        name: str = "sparse_categorical_focal_crossentropy",
+    ) -> None:
+        super().__init__(name=name)
+        self.gamma = float(gamma)
+
+    def call(self, y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
+        y_true = tf.cast(tf.reshape(y_true, [-1]), tf.int32)
+        y_pred = tf.clip_by_value(
+            y_pred,
+            tf.keras.backend.epsilon(),
+            1.0 - tf.keras.backend.epsilon(),
+        )
+        probabilities = tf.gather(y_pred, y_true, batch_dims=1)
+        cross_entropy = -tf.math.log(probabilities)
+        modulating_factor = tf.pow(1.0 - probabilities, self.gamma)
+        return modulating_factor * cross_entropy
+
+    def get_config(self) -> dict:
+        config = super().get_config()
+        config.update({"gamma": self.gamma})
+        return config
 
 
 def build_model(
@@ -476,14 +519,24 @@ def build_model(
         num_classes, activation="softmax", name="predictions"
     )(x)
     model = tf.keras.Model(inputs, outputs, name="ecodetect_mobilenetv2")
-    compile_model(model, learning_rate)
+    compile_model(model, learning_rate, config.focal_loss_gamma)
     return model, base_model
 
 
-def compile_model(model: tf.keras.Model, learning_rate: float) -> None:
+def compile_model(
+    model: tf.keras.Model,
+    learning_rate: float,
+    focal_loss_gamma: float = 0.0,
+) -> None:
+    loss: tf.keras.losses.Loss
+    if focal_loss_gamma > 0:
+        loss = SparseCategoricalFocalCrossentropy(gamma=focal_loss_gamma)
+    else:
+        loss = tf.keras.losses.SparseCategoricalCrossentropy()
+
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate),
-        loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+        loss=loss,
         metrics=[
             tf.keras.metrics.SparseCategoricalAccuracy(name="accuracy"),
         ],
@@ -760,11 +813,19 @@ def main() -> None:
         args.seed,
         config,
     )
-    class_weights = calculate_class_weights(class_counts)
+    class_weights = calculate_class_weights(
+        class_counts,
+        class_names,
+        config.class_weight_multipliers,
+    )
     print(f"Dataset root: {dataset_dir}")
     print(f"Model: {config.model_name}")
     print(f"Classes: {class_names}")
     print(f"Training subset counts: {dict(zip(class_names, class_counts.tolist()))}")
+    if config.class_weight_multipliers:
+        print(f"Class weight multipliers: {config.class_weight_multipliers}")
+    if config.focal_loss_gamma > 0:
+        print(f"Focal loss gamma: {config.focal_loss_gamma}")
     if BACKGROUND_CLASS not in class_names:
         print(
             "No background training samples were found, so this run will train "
@@ -805,7 +866,7 @@ def main() -> None:
                 layer, tf.keras.layers.BatchNormalization
             )
 
-        compile_model(model, args.fine_tune_learning_rate)
+        compile_model(model, args.fine_tune_learning_rate, config.focal_loss_gamma)
         fine_tune_history = model.fit(
             train_ds,
             validation_data=val_ds,
