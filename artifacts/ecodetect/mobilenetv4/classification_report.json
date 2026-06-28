@@ -1,0 +1,33 @@
+{
+  "aluminum": {
+    "precision": 0.2,
+    "recall": 0.5555555555555556,
+    "f1-score": 0.29411764705882354,
+    "support": 9.0
+  },
+  "paper": {
+    "precision": 0.6875,
+    "recall": 0.3793103448275862,
+    "f1-score": 0.4888888888888889,
+    "support": 29.0
+  },
+  "plastic": {
+    "precision": 0.5882352941176471,
+    "recall": 0.5405405405405406,
+    "f1-score": 0.5633802816901409,
+    "support": 37.0
+  },
+  "accuracy": 0.48,
+  "macro avg": {
+    "precision": 0.4919117647058823,
+    "recall": 0.4918021469745608,
+    "f1-score": 0.4487956058792844,
+    "support": 75.0
+  },
+  "weighted avg": {
+    "precision": 0.5800294117647059,
+    "recall": 0.48,
+    "f1-score": 0.5022654269845653,
+    "support": 75.0
+  }
+}

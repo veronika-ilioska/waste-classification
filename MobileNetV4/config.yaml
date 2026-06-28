@@ -1,0 +1,42 @@
+dataset:
+  handle: ahsan71/ecodetect-recyclable-waste-detection-dataset
+  dir:
+  image_extensions:
+    - .bmp
+    - .gif
+    - .jpeg
+    - .jpg
+    - .png
+
+output:
+  dir: artifacts/ecodetect/mobilenetv4
+
+model:
+  name: mobilenetv4_conv_small
+  image_width: 224
+  image_height: 224
+  use_pretrained_weights: true
+  dropout_rate: 0.25
+
+training:
+  batch_size: 32
+  epochs: 10
+  fine_tune_epochs: 5
+  fine_tune_layers: 30
+  learning_rate: 0.001
+  fine_tune_learning_rate: 0.00001
+  seed: 42
+  workers: 0
+
+augmentation:
+  random_rotation: 8
+  random_resized_crop_scale:
+    - 0.85
+    - 1.0
+  color_jitter: 0.1
+
+callbacks:
+  early_stopping_patience: 3
+
+evaluation:
+  misclassified_examples: 25
