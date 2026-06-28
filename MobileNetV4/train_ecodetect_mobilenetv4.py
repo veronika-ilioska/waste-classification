@@ -159,6 +159,11 @@ def parse_args(config: Config, config_path: Path) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=config.seed)
     parser.add_argument("--workers", type=int, default=config.workers)
     parser.add_argument(
+        "--no-early-stopping",
+        action="store_true",
+        help="Run all requested epochs instead of stopping on validation loss.",
+    )
+    parser.add_argument(
         "--no-pretrained-weights",
         action="store_true",
         help="Initialize randomly instead of loading timm pretrained weights.",
@@ -526,7 +531,7 @@ def train_stage(
             patience_counter = 0
         else:
             patience_counter += 1
-            if patience_counter >= patience:
+            if patience > 0 and patience_counter >= patience:
                 print(f"Early stopping {stage} after {epoch} epochs.")
                 break
 
@@ -770,6 +775,7 @@ def main() -> None:
     args = parse_args(config, config_path)
     if args.epochs < 1 or args.fine_tune_epochs < 0:
         raise ValueError("--epochs must be positive and --fine-tune-epochs nonnegative.")
+    early_stopping_patience = 0 if args.no_early_stopping else config.early_stopping_patience
 
     set_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -849,7 +855,7 @@ def main() -> None:
         device,
         args.learning_rate,
         args.epochs,
-        config.early_stopping_patience,
+        early_stopping_patience,
         args.output_dir,
         "head",
     )
@@ -865,7 +871,7 @@ def main() -> None:
             device,
             args.fine_tune_learning_rate,
             args.fine_tune_epochs,
-            config.early_stopping_patience,
+            early_stopping_patience,
             args.output_dir,
             "fine_tuned",
         )

@@ -154,6 +154,12 @@ Train and evaluate MobileNetV4:
 .\.venv\Scripts\python.exe MobileNetV4\train_ecodetect_mobilenetv4.py
 ```
 
+Disable early stopping when you want every requested epoch to run:
+
+```powershell
+.\.venv\Scripts\python.exe MobileNetV4\train_ecodetect_mobilenetv4.py --no-early-stopping
+```
+
 Outputs are saved under `artifacts/ecodetect/mobilenetv4`.
 
 ## EcoDetect YOLOv11
