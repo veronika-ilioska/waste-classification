@@ -120,7 +120,7 @@ def load_config(config_path: Path = DEFAULT_CONFIG_PATH) -> Config:
         random_zoom=float(augmentation.get("random_zoom", 0.1)),
         random_contrast=float(augmentation.get("random_contrast", 0.1)),
         dropout_rate=float(model.get("dropout_rate", 0.25)),
-        early_stopping_patience=int(callbacks.get("early_stopping_patience", 3)),
+        early_stopping_patience=int(callbacks.get("early_stopping_patience", 10)),
         lr_reduction_factor=float(callbacks.get("lr_reduction_factor", 0.2)),
         lr_reduction_patience=int(callbacks.get("lr_reduction_patience", 2)),
         min_learning_rate=float(callbacks.get("min_learning_rate", 0.0000001)),
@@ -259,6 +259,8 @@ def read_image_label(label_path: Path, detection_names: list[str]) -> str:
         if len(row) < 5:
             continue
         class_id = int(float(row[0]))
+        if class_id < 0 or class_id >= len(detection_names):
+            raise ValueError(f"Class id {class_id} in {label_path} is not defined in data.yaml.")
         width = float(row[3])
         height = float(row[4])
         area = width * height
@@ -364,6 +366,8 @@ def load_datasets(
     np.ndarray,
 ]:
     detection_names = read_yolo_class_names(dataset_dir)
+    if len(set(detection_names)) != len(detection_names):
+        raise ValueError(f"Duplicate class names in data.yaml: {detection_names}")
     has_train_background = split_contains_background(
         dataset_dir,
         "train",
@@ -493,26 +497,22 @@ def compile_model(model: tf.keras.Model, learning_rate: float) -> None:
 
 def make_callbacks(
     output_dir: Path,
-    stage: str,
-    config: Config,
 ) -> list[tf.keras.callbacks.Callback]:
+    early_stopping = tf.keras.callbacks.EarlyStopping(
+        monitor="val_loss",
+        patience=10,
+        restore_best_weights=True,
+    )
+
+    checkpoint = tf.keras.callbacks.ModelCheckpoint(
+        output_dir / "best_model.keras",
+        monitor="val_loss",
+        save_best_only=True,
+    )
+
     return [
-        tf.keras.callbacks.ModelCheckpoint(
-            output_dir / f"best_{stage}.keras",
-            monitor="val_loss",
-            save_best_only=True,
-        ),
-        tf.keras.callbacks.EarlyStopping(
-            monitor="val_loss",
-            patience=config.early_stopping_patience,
-            restore_best_weights=True,
-        ),
-        tf.keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss",
-            factor=config.lr_reduction_factor,
-            patience=config.lr_reduction_patience,
-            min_lr=config.min_learning_rate,
-        ),
+        early_stopping,
+        checkpoint,
     ]
 
 
@@ -765,6 +765,7 @@ def main() -> None:
     print(f"Dataset root: {dataset_dir}")
     print(f"Model: {config.model_name}")
     print(f"Classes: {class_names}")
+    print(f"Class index map: {dict(enumerate(class_names))}")
     print(f"Training subset counts: {dict(zip(class_names, class_counts.tolist()))}")
     if BACKGROUND_CLASS not in class_names:
         print(
@@ -792,7 +793,7 @@ def main() -> None:
         validation_data=val_ds,
         epochs=args.epochs,
         class_weight=class_weights,
-        callbacks=make_callbacks(args.output_dir, "head", config),
+        callbacks=make_callbacks(args.output_dir),
     )
 
     fine_tune_history = None
@@ -812,7 +813,7 @@ def main() -> None:
             validation_data=val_ds,
             epochs=args.fine_tune_epochs,
             class_weight=class_weights,
-            callbacks=make_callbacks(args.output_dir, "fine_tuned", config),
+            callbacks=make_callbacks(args.output_dir),
         )
 
     test_metrics = model.evaluate(test_ds, return_dict=True)

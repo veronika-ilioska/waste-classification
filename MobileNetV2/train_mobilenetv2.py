@@ -78,7 +78,7 @@ def load_config() -> Config:
         ),
         image_extensions=extensions,
         batch_size=int(os.getenv("BATCH_SIZE", "32")),
-        epochs=int(os.getenv("EPOCHS", "10")),
+        epochs=int(os.getenv("EPOCHS", "100")),
         fine_tune_epochs=int(os.getenv("FINE_TUNE_EPOCHS", "5")),
         fine_tune_layers=int(os.getenv("FINE_TUNE_LAYERS", "30")),
         learning_rate=float(os.getenv("LEARNING_RATE", "0.001")),
@@ -92,7 +92,7 @@ def load_config() -> Config:
         random_zoom=float(os.getenv("RANDOM_ZOOM", "0.1")),
         random_contrast=float(os.getenv("RANDOM_CONTRAST", "0.1")),
         dropout_rate=float(os.getenv("DROPOUT_RATE", "0.25")),
-        early_stopping_patience=int(os.getenv("EARLY_STOPPING_PATIENCE", "3")),
+        early_stopping_patience=int(os.getenv("EARLY_STOPPING_PATIENCE", "10")),
         lr_reduction_factor=float(os.getenv("LR_REDUCTION_FACTOR", "0.2")),
         lr_reduction_patience=int(os.getenv("LR_REDUCTION_PATIENCE", "2")),
         min_learning_rate=float(os.getenv("MIN_LEARNING_RATE", "0.0000001")),
@@ -271,26 +271,22 @@ def compile_model(model: tf.keras.Model, learning_rate: float) -> None:
 
 def make_callbacks(
     output_dir: Path,
-    stage: str,
-    config: Config,
 ) -> list[tf.keras.callbacks.Callback]:
+    early_stopping = tf.keras.callbacks.EarlyStopping(
+        monitor="val_loss",
+        patience=10,
+        restore_best_weights=True,
+    )
+
+    checkpoint = tf.keras.callbacks.ModelCheckpoint(
+        output_dir / "best_model.keras",
+        monitor="val_loss",
+        save_best_only=True,
+    )
+
     return [
-        tf.keras.callbacks.ModelCheckpoint(
-            output_dir / f"best_{stage}.keras",
-            monitor="val_loss",
-            save_best_only=True,
-        ),
-        tf.keras.callbacks.EarlyStopping(
-            monitor="val_loss",
-            patience=config.early_stopping_patience,
-            restore_best_weights=True,
-        ),
-        tf.keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss",
-            factor=config.lr_reduction_factor,
-            patience=config.lr_reduction_patience,
-            min_lr=config.min_learning_rate,
-        ),
+        early_stopping,
+        checkpoint,
     ]
 
 
@@ -326,6 +322,7 @@ def main() -> None:
     )
     class_weights = calculate_class_weights(class_counts)
     print(f"Classes: {class_names}")
+    print(f"Class index map: {dict(enumerate(class_names))}")
     print(f"Training subset counts: {dict(zip(class_names, class_counts.tolist()))}")
     print(f"Class weights: {class_weights}")
 
@@ -348,7 +345,7 @@ def main() -> None:
         validation_data=val_ds,
         epochs=args.epochs,
         class_weight=class_weights,
-        callbacks=make_callbacks(args.output_dir, "head", config),
+        callbacks=make_callbacks(args.output_dir),
     )
 
     fine_tune_history = None
@@ -368,7 +365,7 @@ def main() -> None:
             validation_data=val_ds,
             epochs=args.fine_tune_epochs,
             class_weight=class_weights,
-            callbacks=make_callbacks(args.output_dir, "fine_tuned", config),
+            callbacks=make_callbacks(args.output_dir),
         )
 
     test_metrics = model.evaluate(test_ds, return_dict=True)

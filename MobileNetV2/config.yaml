@@ -20,7 +20,7 @@ model:
 
 training:
   batch_size: 32
-  epochs: 10
+  epochs: 100
   fine_tune_epochs: 5
   fine_tune_layers: 30
   learning_rate: 0.001
@@ -36,7 +36,7 @@ augmentation:
   random_contrast: 0.1
 
 callbacks:
-  early_stopping_patience: 3
+  early_stopping_patience: 10
   lr_reduction_factor: 0.2
   lr_reduction_patience: 2
   min_learning_rate: 0.0000001

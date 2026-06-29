@@ -19,6 +19,7 @@ import timm
 import torch
 import torch.nn as nn
 import yaml
+from timm.data import resolve_model_data_config
 from PIL import Image
 from sklearn.metrics import classification_report, confusion_matrix
 from torch.utils.data import DataLoader, Dataset
@@ -114,7 +115,7 @@ def load_config(config_path: Path = DEFAULT_CONFIG_PATH) -> Config:
             dataset.get("image_extensions", [".bmp", ".gif", ".jpeg", ".jpg", ".png"])
         ),
         batch_size=int(training.get("batch_size", 32)),
-        epochs=int(training.get("epochs", 10)),
+        epochs=int(training.get("epochs", 100)),
         fine_tune_epochs=int(training.get("fine_tune_epochs", 5)),
         fine_tune_layers=int(training.get("fine_tune_layers", 30)),
         learning_rate=float(training.get("learning_rate", 0.001)),
@@ -126,7 +127,7 @@ def load_config(config_path: Path = DEFAULT_CONFIG_PATH) -> Config:
         random_rotation=float(augmentation.get("random_rotation", 8)),
         random_resized_crop_scale=(float(crop_scale[0]), float(crop_scale[1])),
         color_jitter=float(augmentation.get("color_jitter", 0.1)),
-        early_stopping_patience=int(callbacks.get("early_stopping_patience", 3)),
+        early_stopping_patience=int(callbacks.get("early_stopping_patience", 10)),
         misclassified_examples=int(evaluation.get("misclassified_examples", 25)),
     )
 
@@ -240,6 +241,8 @@ def read_image_label(label_path: Path, detection_names: list[str]) -> str:
         if len(row) < 5:
             continue
         class_id = int(float(row[0]))
+        if class_id < 0 or class_id >= len(detection_names):
+            raise ValueError(f"Class id {class_id} in {label_path} is not defined in data.yaml.")
         area = float(row[3]) * float(row[4])
         if area > best_area:
             best_class_id = class_id
@@ -295,6 +298,8 @@ def collect_datasets(
     config: Config,
 ) -> tuple[list[Path], np.ndarray, list[Path], np.ndarray, list[Path], np.ndarray, list[str]]:
     detection_names = read_yolo_class_names(dataset_dir)
+    if len(set(detection_names)) != len(detection_names):
+        raise ValueError(f"Duplicate class names in data.yaml: {detection_names}")
     has_train_background = split_contains_background(
         dataset_dir,
         "train",
@@ -357,17 +362,44 @@ class EcoDetectDataset(Dataset):
         return tensor, torch.tensor(int(self.labels[index]), dtype=torch.long)
 
 
+def transform_interpolation(name: str) -> transforms.InterpolationMode:
+    modes = {
+        "bilinear": transforms.InterpolationMode.BILINEAR,
+        "bicubic": transforms.InterpolationMode.BICUBIC,
+        "nearest": transforms.InterpolationMode.NEAREST,
+        "lanczos": transforms.InterpolationMode.LANCZOS,
+    }
+    return modes.get(name.lower(), transforms.InterpolationMode.BICUBIC)
+
+
 def make_transforms(config: Config) -> tuple[transforms.Compose, transforms.Compose]:
+    data_config = resolve_model_data_config(timm.create_model(config.model_name, pretrained=False))
+    channels, height, width = data_config["input_size"]
+    if channels != 3:
+        raise ValueError(f"{config.model_name} expects {channels} channels, but RGB images have 3.")
+    if config.image_size != (height, width):
+        raise ValueError(
+            f"{config.model_name} expects input size {(height, width)}, "
+            f"but config image_size is {config.image_size}."
+        )
+
     height, width = config.image_size
+    interpolation = transform_interpolation(str(data_config["interpolation"]))
+    crop_pct = float(data_config.get("crop_pct", 1.0))
+    resize_size = (
+        int(round(height / crop_pct)),
+        int(round(width / crop_pct)),
+    )
     normalize = transforms.Normalize(
-        mean=(0.485, 0.456, 0.406),
-        std=(0.229, 0.224, 0.225),
+        mean=tuple(data_config["mean"]),
+        std=tuple(data_config["std"]),
     )
     train_transform = transforms.Compose(
         [
             transforms.RandomResizedCrop(
                 (height, width),
                 scale=config.random_resized_crop_scale,
+                interpolation=interpolation,
             ),
             transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(config.random_rotation),
@@ -382,7 +414,8 @@ def make_transforms(config: Config) -> tuple[transforms.Compose, transforms.Comp
     )
     eval_transform = transforms.Compose(
         [
-            transforms.Resize((height, width)),
+            transforms.Resize(resize_size, interpolation=interpolation),
+            transforms.CenterCrop((height, width)),
             transforms.ToTensor(),
             normalize,
         ]
@@ -527,7 +560,7 @@ def train_stage(
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             best_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
-            torch.save(best_state, output_dir / f"best_{stage}.pth")
+            torch.save(best_state, output_dir / "best_model.pth")
             patience_counter = 0
         else:
             patience_counter += 1
@@ -817,6 +850,7 @@ def main() -> None:
     print(f"Model: {args.model_name}")
     print(f"Device: {device}")
     print(f"Classes: {class_names}")
+    print(f"Class index map: {dict(enumerate(class_names))}")
     print(f"Training subset counts: {dict(zip(class_names, train_counts.tolist()))}")
     if BACKGROUND_CLASS not in class_names:
         print(
