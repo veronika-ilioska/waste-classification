@@ -212,6 +212,24 @@ YOLOv11 detection summary:
 | Mean precision | 37.63% |
 | Mean recall | 59.40% |
 
+These YOLO metrics evaluate both the predicted class and the predicted bounding
+box location. `mAP50` is the more forgiving score: a prediction counts as
+correct if its box overlaps the ground-truth box by at least 50% IoU
+(`intersection over union`). The saved YOLOv11 run reached 46.74% mAP50, so it
+finds some useful detections at this looser overlap threshold.
+
+`mAP50-95` is stricter because it averages mAP across IoU thresholds from 50%
+to 95%. The saved score is 33.47%, which means performance drops when the boxes
+need to be placed more precisely. `mAP75` is an intermediate check at 75% IoU;
+the saved run reached 40.01%.
+
+Mean precision answers: "When YOLO predicts an object, how often is it right?"
+The saved precision is 37.63%, so the detector produces many false positives.
+Mean recall answers: "Out of all real objects, how many did YOLO find?" The
+saved recall is 59.40%, so it finds more than half of the objects but still
+misses a substantial number. In short, this YOLOv11 run is better at noticing
+possible objects than being selective and confident.
+
 ### Class-Level Results
 
 | Model | Aluminum F1 | Paper F1 | Plastic F1 | Accuracy |
