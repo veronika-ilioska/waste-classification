@@ -10,3 +10,4 @@ ultralytics
 torch
 torchvision
 timm
+pycocotools
