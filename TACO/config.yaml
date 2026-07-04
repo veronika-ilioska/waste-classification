@@ -1,0 +1,33 @@
+dataset:
+  # Download TACO with the upstream repo first, then point this at the folder
+  # containing annotations.json and the batch_* image directories.
+  dir: datasets/TACO/data
+  annotation_file: annotations.json
+  image_extensions:
+    - .jpg
+    - .jpeg
+    - .png
+  category_field: supercategory
+
+output:
+  dir: artifacts/taco/maskrcnn
+
+model:
+  pretrained: true
+  weights: DEFAULT
+
+training:
+  batch_size: 2
+  epochs: 20
+  learning_rate: 0.005
+  momentum: 0.9
+  weight_decay: 0.0005
+  workers: 0
+  seed: 42
+  val_fraction: 0.15
+  test_fraction: 0.15
+  patience: 5
+  device:
+
+augmentation:
+  horizontal_flip_probability: 0.5

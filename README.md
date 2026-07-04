@@ -185,6 +185,33 @@ evaluation outputs are saved under `artifacts/ecodetect/yolov11/train_test`.
 Ultralytics writes plots such as `results.png`, `confusion_matrix.png`, and
 `confusion_matrix_normalized.png` in those run folders.
 
+## TACO Mask R-CNN
+
+The [TACO dataset](https://github.com/pedropro/TACO) provides COCO-style
+instance-segmentation annotations for litter images. `TACO/train_taco_maskrcnn.py`
+trains a Torchvision Mask R-CNN model from those polygon masks.
+
+First download TACO with the upstream repository instructions, then set
+`dataset.dir` in `TACO/config.yaml` to the folder that contains
+`annotations.json` and the `batch_*` image folders.
+
+Run a smoke check:
+
+```powershell
+.\.venv\Scripts\python.exe TACO\train_taco_maskrcnn.py --check-only
+```
+
+Train Mask R-CNN:
+
+```powershell
+.\.venv\Scripts\python.exe TACO\train_taco_maskrcnn.py
+```
+
+By default the script merges TACO categories by `supercategory`, which gives
+Mask R-CNN denser waste groups than the sparse raw category names. Change
+`dataset.category_field` to `name` if you want every original TACO category as
+its own class. Outputs are saved under `artifacts/taco/maskrcnn`.
+
 ## EcoDetect Model Comparison
 
 The EcoDetect runs compare three image-level MobileNet classifiers with one
