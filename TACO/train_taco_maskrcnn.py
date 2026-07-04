@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 import torch
 import yaml
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import functional as F
 
@@ -225,6 +225,17 @@ def collect_image_records(
     return records
 
 
+def has_valid_polygon(segmentation: Any) -> bool:
+    if not isinstance(segmentation, list):
+        return False
+    return any(
+        isinstance(polygon, list)
+        and len(polygon) >= 6
+        and len(polygon) % 2 == 0
+        for polygon in segmentation
+    )
+
+
 def split_records(
     records: list[dict[str, Any]],
     annotations_by_image: dict[int, list[dict[str, Any]]],
@@ -265,7 +276,7 @@ def polygon_to_mask(
     mask_image = Image.new("L", (width, height), 0)
     draw = ImageDraw.Draw(mask_image)
     for polygon in segmentation:
-        if not isinstance(polygon, list) or len(polygon) < 6:
+        if not isinstance(polygon, list) or len(polygon) < 6 or len(polygon) % 2 != 0:
             continue
         points = [(float(polygon[index]), float(polygon[index + 1])) for index in range(0, len(polygon), 2)]
         draw.polygon(points, outline=1, fill=1)
@@ -301,12 +312,38 @@ class TacoMaskDataset(Dataset):
         train: bool,
         flip_probability: float,
     ) -> None:
-        self.records = records
         self.annotations_by_image = annotations_by_image
         self.raw_id_to_label = raw_id_to_label
         self.dataset_dir = dataset_dir
         self.train = train
         self.flip_probability = flip_probability
+        self.records, self.skipped_invalid_mask_count = self.filter_records_with_valid_masks(records)
+
+    def record_has_valid_mask(self, record: dict[str, Any]) -> bool:
+        image_id = int(record["id"])
+        image_path = self.dataset_dir / str(record["file_name"])
+        with Image.open(image_path) as image:
+            image = ImageOps.exif_transpose(image)
+            width, height = image.size
+
+        for annotation in self.annotations_by_image.get(image_id, []):
+            if not has_valid_polygon(annotation.get("segmentation")):
+                continue
+            if int(annotation["category_id"]) not in self.raw_id_to_label:
+                continue
+            if polygon_to_mask(annotation.get("segmentation"), width, height) is not None:
+                return True
+        return False
+
+    def filter_records_with_valid_masks(
+        self,
+        records: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], int]:
+        valid_records = [record for record in records if self.record_has_valid_mask(record)]
+        skipped = len(records) - len(valid_records)
+        if not valid_records:
+            raise ValueError("No images with valid polygon masks were found.")
+        return valid_records, skipped
 
     def __len__(self) -> int:
         return len(self.records)
@@ -316,7 +353,7 @@ class TacoMaskDataset(Dataset):
         image_id = int(record["id"])
         image_path = self.dataset_dir / str(record["file_name"])
         with Image.open(image_path) as image:
-            image = image.convert("RGB")
+            image = ImageOps.exif_transpose(image).convert("RGB")
             width, height = image.size
             image_tensor = F.to_tensor(image)
 
@@ -324,6 +361,8 @@ class TacoMaskDataset(Dataset):
         labels: list[int] = []
         areas: list[float] = []
         for annotation in self.annotations_by_image.get(image_id, []):
+            if not has_valid_polygon(annotation.get("segmentation")):
+                continue
             mask = polygon_to_mask(annotation.get("segmentation"), width, height)
             if mask is None:
                 continue
@@ -499,6 +538,9 @@ def save_split_summary(
     val_records: list[dict[str, Any]],
     test_records: list[dict[str, Any]],
     class_names: list[str],
+    train_dataset: TacoMaskDataset | None = None,
+    val_dataset: TacoMaskDataset | None = None,
+    test_dataset: TacoMaskDataset | None = None,
 ) -> None:
     summary = {
         "train_images": len(train_records),
@@ -506,6 +548,17 @@ def save_split_summary(
         "test_images": len(test_records),
         "classes": class_names,
     }
+    if train_dataset is not None and val_dataset is not None and test_dataset is not None:
+        summary.update(
+            {
+                "usable_train_images": len(train_dataset),
+                "usable_val_images": len(val_dataset),
+                "usable_test_images": len(test_dataset),
+                "skipped_invalid_train_masks": train_dataset.skipped_invalid_mask_count,
+                "skipped_invalid_val_masks": val_dataset.skipped_invalid_mask_count,
+                "skipped_invalid_test_masks": test_dataset.skipped_invalid_mask_count,
+            }
+        )
     (output_dir / "split_summary.json").write_text(
         json.dumps(summary, indent=2),
         encoding="utf-8",
@@ -531,22 +584,6 @@ def main() -> None:
         args.seed,
     )
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    save_split_summary(args.output_dir, train_records, val_records, test_records, class_names)
-    (args.output_dir / "labels.json").write_text(
-        json.dumps(class_names, indent=2),
-        encoding="utf-8",
-    )
-
-    device = torch.device(
-        args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
-    )
-    model = build_model(
-        num_classes=len(class_names),
-        pretrained=config.pretrained and not args.no_pretrained,
-        weights_name=config.weights,
-    ).to(device)
-
     train_dataset = TacoMaskDataset(
         train_records,
         annotations_by_image,
@@ -571,6 +608,32 @@ def main() -> None:
         train=False,
         flip_probability=0.0,
     )
+
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    save_split_summary(
+        args.output_dir,
+        train_records,
+        val_records,
+        test_records,
+        class_names,
+        train_dataset,
+        val_dataset,
+        test_dataset,
+    )
+    (args.output_dir / "labels.json").write_text(
+        json.dumps(class_names, indent=2),
+        encoding="utf-8",
+    )
+
+    device = torch.device(
+        args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
+    )
+    model = build_model(
+        num_classes=len(class_names),
+        pretrained=config.pretrained and not args.no_pretrained,
+        weights_name=config.weights,
+    ).to(device)
+
     train_loader = make_loader(train_dataset, args.batch_size, shuffle=True, workers=args.workers)
     val_loader = make_loader(val_dataset, args.batch_size, shuffle=False, workers=args.workers)
     test_loader = make_loader(test_dataset, args.batch_size, shuffle=False, workers=args.workers)
@@ -582,6 +645,18 @@ def main() -> None:
         "Split sizes: "
         f"train={len(train_dataset)} val={len(val_dataset)} test={len(test_dataset)}"
     )
+    skipped_invalid = (
+        train_dataset.skipped_invalid_mask_count
+        + val_dataset.skipped_invalid_mask_count
+        + test_dataset.skipped_invalid_mask_count
+    )
+    if skipped_invalid:
+        print(
+            "Skipped images without valid polygon masks: "
+            f"train={train_dataset.skipped_invalid_mask_count} "
+            f"val={val_dataset.skipped_invalid_mask_count} "
+            f"test={test_dataset.skipped_invalid_mask_count}"
+        )
 
     images, targets = next(iter(train_loader))
     with torch.no_grad():
