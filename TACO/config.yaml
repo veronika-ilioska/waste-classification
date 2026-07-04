@@ -27,7 +27,7 @@ training:
   val_fraction: 0.15
   test_fraction: 0.15
   patience: 5
-  device:
+  device: auto
 
 augmentation:
   horizontal_flip_probability: 0.5

@@ -148,6 +148,26 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
+def resolve_device(device_name: str | None) -> torch.device:
+    if device_name is None or device_name.lower() == "auto":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    device = torch.device(device_name)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError(
+            f"Requested device {device_name!r}, but CUDA is not available. "
+            "Use device: auto or --device cpu."
+        )
+    return device
+
+
+def describe_device(device: torch.device) -> str:
+    if device.type != "cuda":
+        return str(device)
+    index = device.index if device.index is not None else torch.cuda.current_device()
+    return f"{device} ({torch.cuda.get_device_name(index)})"
+
+
 def resolve_dataset_dir(dataset_dir: Path | None, annotation_file: str) -> Path:
     if dataset_dir is None:
         raise ValueError(
@@ -625,9 +645,7 @@ def main() -> None:
         encoding="utf-8",
     )
 
-    device = torch.device(
-        args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
-    )
+    device = resolve_device(args.device)
     model = build_model(
         num_classes=len(class_names),
         pretrained=config.pretrained and not args.no_pretrained,
@@ -639,7 +657,7 @@ def main() -> None:
     test_loader = make_loader(test_dataset, args.batch_size, shuffle=False, workers=args.workers)
 
     print(f"Dataset root: {dataset_dir}")
-    print(f"Device: {device}")
+    print(f"Device: {describe_device(device)}")
     print(f"Classes ({len(class_names)} including background): {class_names}")
     print(
         "Split sizes: "
