@@ -207,10 +207,28 @@ Train Mask R-CNN:
 .\.venv\Scripts\python.exe TACO\train_taco_maskrcnn.py
 ```
 
-By default the script merges TACO categories by `supercategory`, which gives
-Mask R-CNN denser waste groups than the sparse raw category names. Change
-`dataset.category_field` to `name` if you want every original TACO category as
-its own class. Outputs are saved under `artifacts/taco/maskrcnn`.
+The default `training.device: auto` uses CUDA automatically when a GPU is
+available and falls back to CPU otherwise. In Colab, enable a GPU under
+`Runtime > Change runtime type`, then run the script normally or force CUDA with
+`--device cuda`.
+
+By default the script uses the paper-style TACO-10 taxonomy: `Bottle`,
+`Bottle cap`, `Can`, `Cigarette`, `Cup`, `Lid`, `Other Litter`,
+`Plastic bag + wrapper`, `Pop tab`, and `Straw`. Change `dataset.taxonomy` to
+`category-field` if you want to group categories by `dataset.category_field`
+instead. Outputs are saved under `artifacts/taco/maskrcnn_taco10`.
+
+Training augmentations are configured in `TACO/config.yaml`. The default setup
+uses horizontal flips, small rotations, object-centered random crops, brightness
+and contrast changes, saturation and hue jitter, Gaussian blur, and Gaussian
+noise. Geometric augmentations are applied to both images and masks, then boxes
+and areas are recomputed from the transformed masks.
+
+After training, the script evaluates the test split with COCO-style metrics for
+both masks and boxes. The main segmentation values are written to
+`coco_metrics.json` and `test_metrics.json` as `segm.AP`, `segm.AP50`, and
+`segm.AP75`. This requires `pycocotools`, which is included in
+`requirements.txt`.
 
 ## EcoDetect Model Comparison
 

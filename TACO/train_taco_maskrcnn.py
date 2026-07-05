@@ -14,10 +14,90 @@ import torch
 import yaml
 from PIL import Image, ImageDraw, ImageOps
 from torch.utils.data import DataLoader, Dataset
+from torchvision.transforms import InterpolationMode
 from torchvision.transforms import functional as F
 
 
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.yaml")
+TACO10_OTHER = "Other Litter"
+TACO10_CATEGORY_MAP = {
+    "Aerosol": "Can",
+    "Aluminium foil": TACO10_OTHER,
+    "Battery": TACO10_OTHER,
+    "Aluminium blister pack": TACO10_OTHER,
+    "Carded blister pack": TACO10_OTHER,
+    "Clear plastic bottle": "Bottle",
+    "Glass bottle": "Bottle",
+    "Other plastic bottle": "Bottle",
+    "Plastic bottle cap": "Bottle cap",
+    "Metal bottle cap": "Bottle cap",
+    "Broken glass": TACO10_OTHER,
+    "Drink can": "Can",
+    "Food Can": "Can",
+    "Corrugated carton": TACO10_OTHER,
+    "Drink carton": TACO10_OTHER,
+    "Egg carton": TACO10_OTHER,
+    "Meal carton": TACO10_OTHER,
+    "Other carton": TACO10_OTHER,
+    "Paper cup": "Cup",
+    "Disposable plastic cup": "Cup",
+    "Foam cup": "Cup",
+    "Glass cup": "Cup",
+    "Other plastic cup": "Cup",
+    "Food waste": TACO10_OTHER,
+    "Plastic lid": "Lid",
+    "Metal lid": "Lid",
+    "Magazine paper": TACO10_OTHER,
+    "Tissues": TACO10_OTHER,
+    "Wrapping paper": TACO10_OTHER,
+    "Normal paper": TACO10_OTHER,
+    "Paper bag": TACO10_OTHER,
+    "Plastified paper bag": TACO10_OTHER,
+    "Pizza box": TACO10_OTHER,
+    "Garbage bag": "Plastic bag + wrapper",
+    "Single-use carrier bag": "Plastic bag + wrapper",
+    "Polypropylene bag": "Plastic bag + wrapper",
+    "Produce bag": "Plastic bag + wrapper",
+    "Cereal bag": "Plastic bag + wrapper",
+    "Bread bag": "Plastic bag + wrapper",
+    "Plastic film": "Plastic bag + wrapper",
+    "Crisp packet": "Plastic bag + wrapper",
+    "Other plastic wrapper": "Plastic bag + wrapper",
+    "Retort pouch": "Plastic bag + wrapper",
+    "Spread tub": TACO10_OTHER,
+    "Tupperware": TACO10_OTHER,
+    "Disposable food container": TACO10_OTHER,
+    "Foam food container": TACO10_OTHER,
+    "Other plastic container": TACO10_OTHER,
+    "Plastic glooves": TACO10_OTHER,
+    "Plastic utensils": TACO10_OTHER,
+    "Pop tab": "Pop tab",
+    "Rope & strings": TACO10_OTHER,
+    "Scrap metal": TACO10_OTHER,
+    "Shoe": TACO10_OTHER,
+    "Six pack rings": "Plastic bag + wrapper",
+    "Squeezable tube": TACO10_OTHER,
+    "Plastic straw": "Straw",
+    "Paper straw": "Straw",
+    "Styrofoam piece": TACO10_OTHER,
+    "Toilet tube": TACO10_OTHER,
+    "Unlabeled litter": TACO10_OTHER,
+    "Glass jar": TACO10_OTHER,
+    "Other plastic": TACO10_OTHER,
+    "Cigarette": "Cigarette",
+}
+TACO10_CLASS_NAMES = [
+    "Bottle",
+    "Bottle cap",
+    "Can",
+    "Cigarette",
+    "Cup",
+    "Lid",
+    TACO10_OTHER,
+    "Plastic bag + wrapper",
+    "Pop tab",
+    "Straw",
+]
 
 
 @dataclass(frozen=True)
@@ -25,6 +105,7 @@ class Config:
     dataset_dir: Path | None
     annotation_file: str
     image_extensions: frozenset[str]
+    taxonomy: str
     category_field: str
     output_dir: Path
     pretrained: bool
@@ -41,6 +122,18 @@ class Config:
     patience: int
     device: str | None
     horizontal_flip_probability: float
+    rotation_degrees: float
+    object_crop_probability: float
+    object_crop_scale: tuple[float, float]
+    brightness: float
+    contrast: float
+    saturation: float
+    hue: float
+    blur_probability: float
+    blur_kernel_size: int
+    noise_probability: float
+    noise_std: float
+    evaluation_score_threshold: float
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -79,6 +172,14 @@ def extensions(value: Any) -> frozenset[str]:
     return frozenset(str(part).strip().lower() for part in parts if str(part).strip())
 
 
+def float_pair(value: Any, default: tuple[float, float]) -> tuple[float, float]:
+    if value is None:
+        return default
+    if not isinstance(value, list | tuple) or len(value) != 2:
+        raise ValueError(f"Expected a two-value list, got: {value!r}")
+    return float(value[0]), float(value[1])
+
+
 def load_config(config_path: Path) -> Config:
     raw = load_yaml(config_path)
     dataset = section(raw, "dataset")
@@ -86,11 +187,13 @@ def load_config(config_path: Path) -> Config:
     model = section(raw, "model")
     training = section(raw, "training")
     augmentation = section(raw, "augmentation")
+    evaluation = section(raw, "evaluation")
 
     return Config(
         dataset_dir=optional_path(dataset.get("dir")),
         annotation_file=str(dataset.get("annotation_file", "annotations.json")),
         image_extensions=extensions(dataset.get("image_extensions", [".jpg", ".jpeg", ".png"])),
+        taxonomy=str(dataset.get("taxonomy", "taco10")),
         category_field=str(dataset.get("category_field", "supercategory")),
         output_dir=Path(str(output.get("dir", "artifacts/taco/maskrcnn"))),
         pretrained=bool(model.get("pretrained", True)),
@@ -107,6 +210,18 @@ def load_config(config_path: Path) -> Config:
         patience=int(training.get("patience", 5)),
         device=optional_text(training.get("device")),
         horizontal_flip_probability=float(augmentation.get("horizontal_flip_probability", 0.5)),
+        rotation_degrees=float(augmentation.get("rotation_degrees", 0.0)),
+        object_crop_probability=float(augmentation.get("object_crop_probability", 0.0)),
+        object_crop_scale=float_pair(augmentation.get("object_crop_scale"), (0.65, 1.0)),
+        brightness=float(augmentation.get("brightness", 0.0)),
+        contrast=float(augmentation.get("contrast", 0.0)),
+        saturation=float(augmentation.get("saturation", 0.0)),
+        hue=float(augmentation.get("hue", 0.0)),
+        blur_probability=float(augmentation.get("blur_probability", 0.0)),
+        blur_kernel_size=int(augmentation.get("blur_kernel_size", 5)),
+        noise_probability=float(augmentation.get("noise_probability", 0.0)),
+        noise_std=float(augmentation.get("noise_std", 0.0)),
+        evaluation_score_threshold=float(evaluation.get("score_threshold", 0.001)),
     )
 
 
@@ -125,6 +240,12 @@ def parse_args(config: Config, config_path: Path) -> argparse.Namespace:
     parser.add_argument("--dataset-dir", type=Path, default=config.dataset_dir)
     parser.add_argument("--annotation-file", default=config.annotation_file)
     parser.add_argument("--output-dir", type=Path, default=config.output_dir)
+    parser.add_argument(
+        "--taxonomy",
+        choices=["taco10", "category-field"],
+        default=config.taxonomy,
+        help="Use the paper-style TACO-10 mapping or group by --category-field.",
+    )
     parser.add_argument("--category-field", default=config.category_field)
     parser.add_argument("--batch-size", type=int, default=config.batch_size)
     parser.add_argument("--epochs", type=int, default=config.epochs)
@@ -135,6 +256,12 @@ def parse_args(config: Config, config_path: Path) -> argparse.Namespace:
     parser.add_argument("--test-fraction", type=float, default=config.test_fraction)
     parser.add_argument("--patience", type=int, default=config.patience)
     parser.add_argument("--device", default=config.device)
+    parser.add_argument(
+        "--evaluation-score-threshold",
+        type=float,
+        default=config.evaluation_score_threshold,
+        help="Minimum prediction score included in COCO AP evaluation.",
+    )
     parser.add_argument("--no-pretrained", action="store_true")
     parser.add_argument("--check-only", action="store_true")
     return parser.parse_args()
@@ -201,8 +328,19 @@ def category_name(category: dict[str, Any], field: str) -> str:
 
 def build_category_map(
     categories: list[dict[str, Any]],
+    taxonomy: str,
     category_field: str,
 ) -> tuple[dict[int, int], list[str]]:
+    if taxonomy == "taco10":
+        class_to_id = {name: index + 1 for index, name in enumerate(TACO10_CLASS_NAMES)}
+        raw_id_to_label = {}
+        for category in categories:
+            name = str(category["name"]).strip()
+            if name not in TACO10_CATEGORY_MAP:
+                raise ValueError(f"TACO-10 mapping is missing category: {name}")
+            raw_id_to_label[int(category["id"])] = class_to_id[TACO10_CATEGORY_MAP[name]]
+        return raw_id_to_label, ["background", *TACO10_CLASS_NAMES]
+
     raw_id_to_group: dict[int, str] = {}
     for category in categories:
         raw_id_to_group[int(category["id"])] = category_name(category, category_field)
@@ -223,6 +361,8 @@ def collect_annotations_by_image(
         if int(annotation.get("iscrowd", 0)):
             continue
         if float(annotation.get("area", 0.0)) <= 0:
+            continue
+        if not has_valid_polygon(annotation.get("segmentation")):
             continue
         grouped[int(annotation["image_id"])].append(annotation)
     return grouped
@@ -322,6 +462,117 @@ def boxes_from_masks(masks: torch.Tensor) -> torch.Tensor:
     return torch.stack(boxes) if boxes else torch.zeros((0, 4), dtype=torch.float32)
 
 
+def keep_nonempty_masks(
+    masks: torch.Tensor,
+    labels: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    keep = masks.flatten(1).sum(dim=1) > 0
+    return masks[keep], labels[keep]
+
+
+def random_adjust_factor(amount: float) -> float:
+    if amount <= 0:
+        return 1.0
+    return random.uniform(max(0.0, 1.0 - amount), 1.0 + amount)
+
+
+def apply_object_centered_crop(
+    image: torch.Tensor,
+    masks: torch.Tensor,
+    labels: torch.Tensor,
+    crop_scale: tuple[float, float],
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    _, height, width = image.shape
+    if height <= 1 or width <= 1:
+        return image, masks, labels
+
+    boxes = boxes_from_masks(masks)
+    object_index = random.randrange(masks.shape[0])
+    x_min, y_min, x_max, y_max = boxes[object_index].tolist()
+    center_x = (x_min + x_max) / 2.0
+    center_y = (y_min + y_max) / 2.0
+    scale = random.uniform(crop_scale[0], crop_scale[1])
+    crop_height = max(1, min(height, int(round(height * scale))))
+    crop_width = max(1, min(width, int(round(width * scale))))
+
+    jitter_x = random.uniform(-0.15, 0.15) * crop_width
+    jitter_y = random.uniform(-0.15, 0.15) * crop_height
+    left = int(round(center_x - crop_width / 2.0 + jitter_x))
+    top = int(round(center_y - crop_height / 2.0 + jitter_y))
+    left = max(0, min(width - crop_width, left))
+    top = max(0, min(height - crop_height, top))
+
+    cropped_image = F.crop(image, top, left, crop_height, crop_width)
+    cropped_masks = F.crop(masks, top, left, crop_height, crop_width)
+    cropped_masks, cropped_labels = keep_nonempty_masks(cropped_masks, labels)
+    if cropped_masks.numel() == 0:
+        return image, masks, labels
+    return cropped_image, cropped_masks, cropped_labels
+
+
+def apply_train_augmentations(
+    image: torch.Tensor,
+    masks: torch.Tensor,
+    labels: torch.Tensor,
+    *,
+    flip_probability: float,
+    rotation_degrees: float,
+    object_crop_probability: float,
+    object_crop_scale: tuple[float, float],
+    brightness: float,
+    contrast: float,
+    saturation: float,
+    hue: float,
+    blur_probability: float,
+    blur_kernel_size: int,
+    noise_probability: float,
+    noise_std: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    if random.random() < flip_probability:
+        image = F.hflip(image)
+        masks = torch.flip(masks, dims=[2])
+
+    if rotation_degrees > 0:
+        angle = random.uniform(-rotation_degrees, rotation_degrees)
+        image = F.rotate(
+            image,
+            angle,
+            interpolation=InterpolationMode.BILINEAR,
+            fill=0,
+        )
+        masks = F.rotate(
+            masks,
+            angle,
+            interpolation=InterpolationMode.NEAREST,
+            fill=0,
+        )
+        masks, labels = keep_nonempty_masks(masks, labels)
+
+    if masks.numel() and random.random() < object_crop_probability:
+        image, masks, labels = apply_object_centered_crop(
+            image,
+            masks,
+            labels,
+            object_crop_scale,
+        )
+
+    if brightness > 0:
+        image = F.adjust_brightness(image, random_adjust_factor(brightness))
+    if contrast > 0:
+        image = F.adjust_contrast(image, random_adjust_factor(contrast))
+    if saturation > 0:
+        image = F.adjust_saturation(image, random_adjust_factor(saturation))
+    if hue > 0:
+        image = F.adjust_hue(image, random.uniform(-hue, hue))
+    if blur_probability > 0 and random.random() < blur_probability:
+        kernel_size = blur_kernel_size if blur_kernel_size % 2 == 1 else blur_kernel_size + 1
+        image = F.gaussian_blur(image, kernel_size=[max(3, kernel_size), max(3, kernel_size)])
+    if noise_probability > 0 and noise_std > 0 and random.random() < noise_probability:
+        image = torch.clamp(image + torch.randn_like(image) * noise_std, 0.0, 1.0)
+
+    return image, masks, labels
+
+
 class TacoMaskDataset(Dataset):
     def __init__(
         self,
@@ -331,38 +582,74 @@ class TacoMaskDataset(Dataset):
         dataset_dir: Path,
         train: bool,
         flip_probability: float,
+        rotation_degrees: float = 0.0,
+        object_crop_probability: float = 0.0,
+        object_crop_scale: tuple[float, float] = (0.65, 1.0),
+        brightness: float = 0.0,
+        contrast: float = 0.0,
+        saturation: float = 0.0,
+        hue: float = 0.0,
+        blur_probability: float = 0.0,
+        blur_kernel_size: int = 5,
+        noise_probability: float = 0.0,
+        noise_std: float = 0.0,
     ) -> None:
         self.annotations_by_image = annotations_by_image
         self.raw_id_to_label = raw_id_to_label
         self.dataset_dir = dataset_dir
         self.train = train
         self.flip_probability = flip_probability
+        self.rotation_degrees = rotation_degrees
+        self.object_crop_probability = object_crop_probability
+        self.object_crop_scale = object_crop_scale
+        self.brightness = brightness
+        self.contrast = contrast
+        self.saturation = saturation
+        self.hue = hue
+        self.blur_probability = blur_probability
+        self.blur_kernel_size = blur_kernel_size
+        self.noise_probability = noise_probability
+        self.noise_std = noise_std
+
+        # Filter out images whose annotations cannot produce at least one valid mask.
         self.records, self.skipped_invalid_mask_count = self.filter_records_with_valid_masks(records)
 
     def record_has_valid_mask(self, record: dict[str, Any]) -> bool:
         image_id = int(record["id"])
         image_path = self.dataset_dir / str(record["file_name"])
+
         with Image.open(image_path) as image:
             image = ImageOps.exif_transpose(image)
             width, height = image.size
 
         for annotation in self.annotations_by_image.get(image_id, []):
-            if not has_valid_polygon(annotation.get("segmentation")):
+            raw_category_id = int(annotation.get("category_id", -1))
+            if raw_category_id not in self.raw_id_to_label:
                 continue
-            if int(annotation["category_id"]) not in self.raw_id_to_label:
+
+            segmentation = annotation.get("segmentation")
+            if not has_valid_polygon(segmentation):
                 continue
-            if polygon_to_mask(annotation.get("segmentation"), width, height) is not None:
+
+            if polygon_to_mask(segmentation, width, height) is not None:
                 return True
+
         return False
 
     def filter_records_with_valid_masks(
         self,
         records: list[dict[str, Any]],
     ) -> tuple[list[dict[str, Any]], int]:
-        valid_records = [record for record in records if self.record_has_valid_mask(record)]
+        valid_records = [
+            record
+            for record in records
+            if self.record_has_valid_mask(record)
+        ]
         skipped = len(records) - len(valid_records)
+
         if not valid_records:
             raise ValueError("No images with valid polygon masks were found.")
+
         return valid_records, skipped
 
     def __len__(self) -> int:
@@ -379,7 +666,6 @@ class TacoMaskDataset(Dataset):
 
         masks: list[torch.Tensor] = []
         labels: list[int] = []
-        areas: list[float] = []
         for annotation in self.annotations_by_image.get(image_id, []):
             if not has_valid_polygon(annotation.get("segmentation")):
                 continue
@@ -391,24 +677,42 @@ class TacoMaskDataset(Dataset):
                 raise ValueError(f"Unknown category id {raw_category_id} in image {image_id}.")
             masks.append(mask)
             labels.append(self.raw_id_to_label[raw_category_id])
-            areas.append(float(annotation.get("area", mask.sum().item())))
 
         if not masks:
             raise ValueError(f"No valid polygon masks found for {image_path}.")
 
-        mask_tensor = torch.stack(masks)
-        box_tensor = boxes_from_masks(mask_tensor)
         label_tensor = torch.tensor(labels, dtype=torch.int64)
-        area_tensor = torch.tensor(areas, dtype=torch.float32)
-        iscrowd = torch.zeros((len(labels),), dtype=torch.int64)
+        mask_tensor = torch.stack(masks)
 
-        if self.train and random.random() < self.flip_probability:
-            image_tensor = F.hflip(image_tensor)
-            mask_tensor = torch.flip(mask_tensor, dims=[2])
-            x_min = width - box_tensor[:, 2]
-            x_max = width - box_tensor[:, 0]
-            box_tensor[:, 0] = x_min
-            box_tensor[:, 2] = x_max
+        if self.train:
+            original_image = image_tensor
+            original_masks = mask_tensor
+            original_labels = label_tensor
+            image_tensor, mask_tensor, label_tensor = apply_train_augmentations(
+                image_tensor,
+                mask_tensor,
+                label_tensor,
+                flip_probability=self.flip_probability,
+                rotation_degrees=self.rotation_degrees,
+                object_crop_probability=self.object_crop_probability,
+                object_crop_scale=self.object_crop_scale,
+                brightness=self.brightness,
+                contrast=self.contrast,
+                saturation=self.saturation,
+                hue=self.hue,
+                blur_probability=self.blur_probability,
+                blur_kernel_size=self.blur_kernel_size,
+                noise_probability=self.noise_probability,
+                noise_std=self.noise_std,
+            )
+            if mask_tensor.numel() == 0:
+                image_tensor = original_image
+                mask_tensor = original_masks
+                label_tensor = original_labels
+
+        box_tensor = boxes_from_masks(mask_tensor)
+        area_tensor = mask_tensor.flatten(1).sum(dim=1).to(torch.float32)
+        iscrowd = torch.zeros((len(label_tensor),), dtype=torch.int64)
 
         target = {
             "boxes": box_tensor,
@@ -552,6 +856,197 @@ def save_sample_predictions(
     )
 
 
+def coco_ground_truth(
+    records: list[dict[str, Any]],
+    annotations_by_image: dict[int, list[dict[str, Any]]],
+    raw_id_to_label: dict[int, int],
+    class_names: list[str],
+) -> dict[str, Any]:
+    image_ids = {int(record["id"]) for record in records}
+    images = [
+        {
+            "id": int(record["id"]),
+            "file_name": str(record["file_name"]),
+            "width": int(record["width"]),
+            "height": int(record["height"]),
+        }
+        for record in records
+    ]
+    annotations = []
+    annotation_id = 1
+    for image_id in sorted(image_ids):
+        for annotation in annotations_by_image.get(image_id, []):
+            raw_category_id = int(annotation["category_id"])
+            if raw_category_id not in raw_id_to_label:
+                continue
+            segmentation = annotation.get("segmentation")
+            if not isinstance(segmentation, list) or not segmentation:
+                continue
+            bbox = annotation.get("bbox")
+            if not bbox or len(bbox) != 4:
+                continue
+            annotations.append(
+                {
+                    "id": annotation_id,
+                    "image_id": image_id,
+                    "category_id": raw_id_to_label[raw_category_id],
+                    "segmentation": segmentation,
+                    "bbox": [float(value) for value in bbox],
+                    "area": float(annotation.get("area", 0.0)),
+                    "iscrowd": int(annotation.get("iscrowd", 0)),
+                }
+            )
+            annotation_id += 1
+
+    return {
+        "info": {"description": "TACO test split remapped for Mask R-CNN evaluation"},
+        "licenses": [],
+        "images": images,
+        "annotations": annotations,
+        "categories": [
+            {"id": index, "name": name}
+            for index, name in enumerate(class_names)
+            if index != 0
+        ],
+    }
+
+
+def prediction_to_coco_results(
+    prediction: dict[str, torch.Tensor],
+    image_id: int,
+    score_threshold: float,
+) -> list[dict[str, Any]]:
+    try:
+        from pycocotools import mask as mask_utils
+    except ImportError as error:
+        raise ImportError(
+            "pycocotools is required for COCO mask AP. Install requirements.txt "
+            "again, or in Colab run: !pip install pycocotools"
+        ) from error
+
+    boxes = prediction["boxes"].detach().cpu()
+    labels = prediction["labels"].detach().cpu()
+    scores = prediction["scores"].detach().cpu()
+    masks = prediction["masks"].detach().cpu()
+    results = []
+    for box, label, score, mask in zip(boxes, labels, scores, masks):
+        score_value = float(score.item())
+        if score_value < score_threshold:
+            continue
+        mask_array = (mask[0].numpy() >= 0.5).astype(np.uint8)
+        if int(mask_array.sum()) == 0:
+            continue
+        rle = mask_utils.encode(np.asfortranarray(mask_array))
+        rle["counts"] = rle["counts"].decode("utf-8")
+        x_min, y_min, x_max, y_max = [float(value) for value in box.tolist()]
+        results.append(
+            {
+                "image_id": image_id,
+                "category_id": int(label.item()),
+                "bbox": [x_min, y_min, max(0.0, x_max - x_min), max(0.0, y_max - y_min)],
+                "segmentation": rle,
+                "score": score_value,
+            }
+        )
+    return results
+
+
+@torch.no_grad()
+def collect_coco_predictions(
+    model: torch.nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+    score_threshold: float,
+) -> list[dict[str, Any]]:
+    model.eval()
+    results = []
+    for images, targets in loader:
+        predictions = model([image.to(device) for image in images])
+        for target, prediction in zip(targets, predictions):
+            image_id = int(target["image_id"].item())
+            results.extend(prediction_to_coco_results(prediction, image_id, score_threshold))
+    return results
+
+
+def summarize_coco_eval(stats: np.ndarray) -> dict[str, float]:
+    names = [
+        "AP",
+        "AP50",
+        "AP75",
+        "AP_small",
+        "AP_medium",
+        "AP_large",
+        "AR_max1",
+        "AR_max10",
+        "AR_max100",
+        "AR_small",
+        "AR_medium",
+        "AR_large",
+    ]
+    return {name: float(value) for name, value in zip(names, stats.tolist())}
+
+
+def run_coco_eval(
+    ground_truth_path: Path,
+    predictions_path: Path,
+    iou_type: str,
+) -> dict[str, float]:
+    try:
+        from pycocotools.coco import COCO
+        from pycocotools.cocoeval import COCOeval
+    except ImportError as error:
+        raise ImportError(
+            "pycocotools is required for COCO AP metrics. Install requirements.txt "
+            "again, or in Colab run: !pip install pycocotools"
+        ) from error
+
+    coco_gt = COCO(str(ground_truth_path))
+    coco_predictions = json.loads(predictions_path.read_text(encoding="utf-8"))
+    if not coco_predictions:
+        return {name: 0.0 for name in summarize_coco_eval(np.zeros(12)).keys()}
+    coco_dt = coco_gt.loadRes(str(predictions_path))
+    evaluator = COCOeval(coco_gt, coco_dt, iouType=iou_type)
+    evaluator.evaluate()
+    evaluator.accumulate()
+    evaluator.summarize()
+    return summarize_coco_eval(evaluator.stats)
+
+
+def evaluate_coco_metrics(
+    model: torch.nn.Module,
+    test_loader: DataLoader,
+    test_records: list[dict[str, Any]],
+    annotations_by_image: dict[int, list[dict[str, Any]]],
+    raw_id_to_label: dict[int, int],
+    class_names: list[str],
+    output_dir: Path,
+    device: torch.device,
+    score_threshold: float,
+) -> dict[str, dict[str, float]]:
+    ground_truth = coco_ground_truth(
+        test_records,
+        annotations_by_image,
+        raw_id_to_label,
+        class_names,
+    )
+    ground_truth_path = output_dir / "coco_test_ground_truth.json"
+    predictions_path = output_dir / "coco_test_predictions.json"
+    ground_truth_path.write_text(json.dumps(ground_truth), encoding="utf-8")
+
+    predictions = collect_coco_predictions(model, test_loader, device, score_threshold)
+    predictions_path.write_text(json.dumps(predictions), encoding="utf-8")
+
+    metrics = {
+        "segm": run_coco_eval(ground_truth_path, predictions_path, "segm"),
+        "bbox": run_coco_eval(ground_truth_path, predictions_path, "bbox"),
+    }
+    (output_dir / "coco_metrics.json").write_text(
+        json.dumps(metrics, indent=2),
+        encoding="utf-8",
+    )
+    return metrics
+
+
 def save_split_summary(
     output_dir: Path,
     train_records: list[dict[str, Any]],
@@ -593,7 +1088,11 @@ def main() -> None:
 
     dataset_dir = resolve_dataset_dir(args.dataset_dir, args.annotation_file)
     coco = load_coco_annotations(dataset_dir, args.annotation_file)
-    raw_id_to_label, class_names = build_category_map(coco["categories"], args.category_field)
+    raw_id_to_label, class_names = build_category_map(
+        coco["categories"],
+        args.taxonomy,
+        args.category_field,
+    )
     annotations_by_image = collect_annotations_by_image(coco["annotations"])
     records = collect_image_records(coco, dataset_dir, config.image_extensions)
     train_records, val_records, test_records = split_records(
@@ -611,6 +1110,17 @@ def main() -> None:
         dataset_dir,
         train=True,
         flip_probability=config.horizontal_flip_probability,
+        rotation_degrees=config.rotation_degrees,
+        object_crop_probability=config.object_crop_probability,
+        object_crop_scale=config.object_crop_scale,
+        brightness=config.brightness,
+        contrast=config.contrast,
+        saturation=config.saturation,
+        hue=config.hue,
+        blur_probability=config.blur_probability,
+        blur_kernel_size=config.blur_kernel_size,
+        noise_probability=config.noise_probability,
+        noise_std=config.noise_std,
     )
     val_dataset = TacoMaskDataset(
         val_records,
@@ -723,17 +1233,31 @@ def main() -> None:
     if (args.output_dir / "best_model.pth").is_file():
         model.load_state_dict(torch.load(args.output_dir / "best_model.pth", map_location=device))
     test_loss = evaluate_loss(model, test_loader, device)
+    coco_metrics = evaluate_coco_metrics(
+        model,
+        test_loader,
+        test_records,
+        annotations_by_image,
+        raw_id_to_label,
+        class_names,
+        args.output_dir,
+        device,
+        args.evaluation_score_threshold,
+    )
     torch.save(model.state_dict(), args.output_dir / "taco_maskrcnn.pth")
     (args.output_dir / "history.json").write_text(
         json.dumps(history, indent=2),
         encoding="utf-8",
     )
     (args.output_dir / "test_metrics.json").write_text(
-        json.dumps({"loss": float(test_loss)}, indent=2),
+        json.dumps({"loss": float(test_loss), "coco": coco_metrics}, indent=2),
         encoding="utf-8",
     )
     save_sample_predictions(model, test_loader, class_names, args.output_dir, device)
     print(f"Test loss: {test_loss:.4f}")
+    print(f"Mask AP: {coco_metrics['segm']['AP']:.4f}")
+    print(f"Mask AP50: {coco_metrics['segm']['AP50']:.4f}")
+    print(f"Mask AP75: {coco_metrics['segm']['AP75']:.4f}")
     print(f"Saved Mask R-CNN artifacts to {args.output_dir.resolve()}")
 
 
