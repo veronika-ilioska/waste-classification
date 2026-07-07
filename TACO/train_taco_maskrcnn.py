@@ -322,6 +322,25 @@ def boxes_from_masks(masks: torch.Tensor) -> torch.Tensor:
     return torch.stack(boxes) if boxes else torch.zeros((0, 4), dtype=torch.float32)
 
 
+def valid_box_mask(boxes: torch.Tensor) -> torch.Tensor:
+    if boxes.numel() == 0:
+        return torch.zeros((0,), dtype=torch.bool)
+    return (boxes[:, 2] > boxes[:, 0]) & (boxes[:, 3] > boxes[:, 1])
+
+
+def filter_instances_with_valid_boxes(
+    masks: torch.Tensor,
+    labels: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    boxes = boxes_from_masks(masks)
+    keep = valid_box_mask(boxes)
+    masks = masks[keep]
+    labels = labels[keep]
+    boxes = boxes[keep]
+    areas = masks.flatten(1).sum(dim=1).to(torch.float32)
+    return masks, labels, boxes, areas
+
+
 class TacoMaskDataset(Dataset):
     def __init__(
         self,
@@ -351,7 +370,11 @@ class TacoMaskDataset(Dataset):
                 continue
             if int(annotation["category_id"]) not in self.raw_id_to_label:
                 continue
-            if polygon_to_mask(annotation.get("segmentation"), width, height) is not None:
+            mask = polygon_to_mask(annotation.get("segmentation"), width, height)
+            if mask is None:
+                continue
+            boxes = boxes_from_masks(mask.unsqueeze(0))
+            if bool(valid_box_mask(boxes).item()):
                 return True
         return False
 
@@ -369,6 +392,14 @@ class TacoMaskDataset(Dataset):
         return len(self.records)
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        for offset in range(len(self.records)):
+            try:
+                return self.load_item((index + offset) % len(self.records))
+            except ValueError:
+                continue
+        raise ValueError("No images with valid positive-area boxes were found.")
+
+    def load_item(self, index: int) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         record = self.records[index]
         image_id = int(record["id"])
         image_path = self.dataset_dir / str(record["file_name"])
@@ -379,7 +410,6 @@ class TacoMaskDataset(Dataset):
 
         masks: list[torch.Tensor] = []
         labels: list[int] = []
-        areas: list[float] = []
         for annotation in self.annotations_by_image.get(image_id, []):
             if not has_valid_polygon(annotation.get("segmentation")):
                 continue
@@ -391,24 +421,30 @@ class TacoMaskDataset(Dataset):
                 raise ValueError(f"Unknown category id {raw_category_id} in image {image_id}.")
             masks.append(mask)
             labels.append(self.raw_id_to_label[raw_category_id])
-            areas.append(float(annotation.get("area", mask.sum().item())))
 
         if not masks:
             raise ValueError(f"No valid polygon masks found for {image_path}.")
 
         mask_tensor = torch.stack(masks)
-        box_tensor = boxes_from_masks(mask_tensor)
         label_tensor = torch.tensor(labels, dtype=torch.int64)
-        area_tensor = torch.tensor(areas, dtype=torch.float32)
-        iscrowd = torch.zeros((len(labels),), dtype=torch.int64)
+        mask_tensor, label_tensor, box_tensor, area_tensor = filter_instances_with_valid_boxes(
+            mask_tensor,
+            label_tensor,
+        )
+        if mask_tensor.numel() == 0:
+            raise ValueError(f"No valid positive-area boxes found for {image_path}.")
 
         if self.train and random.random() < self.flip_probability:
             image_tensor = F.hflip(image_tensor)
             mask_tensor = torch.flip(mask_tensor, dims=[2])
-            x_min = width - box_tensor[:, 2]
-            x_max = width - box_tensor[:, 0]
-            box_tensor[:, 0] = x_min
-            box_tensor[:, 2] = x_max
+            mask_tensor, label_tensor, box_tensor, area_tensor = filter_instances_with_valid_boxes(
+                mask_tensor,
+                label_tensor,
+            )
+            if mask_tensor.numel() == 0:
+                raise ValueError(f"No valid positive-area boxes found after augmentation for {image_path}.")
+
+        iscrowd = torch.zeros((len(label_tensor),), dtype=torch.int64)
 
         target = {
             "boxes": box_tensor,
