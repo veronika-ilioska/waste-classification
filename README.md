@@ -190,6 +190,8 @@ Ultralytics writes plots such as `results.png`, `confusion_matrix.png`, and
 The [TACO dataset](https://github.com/pedropro/TACO) provides COCO-style
 instance-segmentation annotations for litter images. `TACO/train_taco_maskrcnn.py`
 trains a Torchvision Mask R-CNN model from those polygon masks.
+This setup follows the Mask R-CNN/TACO-10 direction from the
+[TACO paper](https://arxiv.org/pdf/2003.06975).
 
 First download TACO with the upstream repository instructions, then set
 `dataset.dir` in `TACO/config.yaml` to the folder that contains
