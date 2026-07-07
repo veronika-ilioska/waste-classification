@@ -462,7 +462,6 @@ def boxes_from_masks(masks: torch.Tensor) -> torch.Tensor:
     return torch.stack(boxes) if boxes else torch.zeros((0, 4), dtype=torch.float32)
 
 
-<<<<<<< HEAD
 def valid_box_mask(boxes: torch.Tensor) -> torch.Tensor:
     if boxes.numel() == 0:
         return torch.zeros((0,), dtype=torch.bool)
@@ -480,7 +479,7 @@ def filter_instances_with_valid_boxes(
     boxes = boxes[keep]
     areas = masks.flatten(1).sum(dim=1).to(torch.float32)
     return masks, labels, boxes, areas
-=======
+
 def keep_nonempty_masks(
     masks: torch.Tensor,
     labels: torch.Tensor,
@@ -590,7 +589,7 @@ def apply_train_augmentations(
         image = torch.clamp(image + torch.randn_like(image) * noise_std, 0.0, 1.0)
 
     return image, masks, labels
->>>>>>> origin/main
+
 
 
 class TacoMaskDataset(Dataset):
@@ -650,16 +649,16 @@ class TacoMaskDataset(Dataset):
             segmentation = annotation.get("segmentation")
             if not has_valid_polygon(segmentation):
                 continue
-<<<<<<< HEAD
+
             mask = polygon_to_mask(annotation.get("segmentation"), width, height)
             if mask is None:
                 continue
             boxes = boxes_from_masks(mask.unsqueeze(0))
             if bool(valid_box_mask(boxes).item()):
-=======
 
-            if polygon_to_mask(segmentation, width, height) is not None:
->>>>>>> origin/main
+
+             if polygon_to_mask(segmentation, width, height) is not None:
+
                 return True
 
         return False
@@ -717,7 +716,7 @@ class TacoMaskDataset(Dataset):
         if not masks:
             raise ValueError(f"No valid polygon masks found for {image_path}.")
 
-<<<<<<< HEAD
+
         mask_tensor = torch.stack(masks)
         label_tensor = torch.tensor(labels, dtype=torch.int64)
         mask_tensor, label_tensor, box_tensor, area_tensor = filter_instances_with_valid_boxes(
@@ -737,7 +736,7 @@ class TacoMaskDataset(Dataset):
             if mask_tensor.numel() == 0:
                 raise ValueError(f"No valid positive-area boxes found after augmentation for {image_path}.")
 
-=======
+
         label_tensor = torch.tensor(labels, dtype=torch.int64)
         mask_tensor = torch.stack(masks)
 
@@ -769,7 +768,6 @@ class TacoMaskDataset(Dataset):
 
         box_tensor = boxes_from_masks(mask_tensor)
         area_tensor = mask_tensor.flatten(1).sum(dim=1).to(torch.float32)
->>>>>>> origin/main
         iscrowd = torch.zeros((len(label_tensor),), dtype=torch.int64)
 
         target = {
