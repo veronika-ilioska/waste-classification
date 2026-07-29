@@ -480,6 +480,7 @@ def filter_instances_with_valid_boxes(
     areas = masks.flatten(1).sum(dim=1).to(torch.float32)
     return masks, labels, boxes, areas
 
+
 def keep_nonempty_masks(
     masks: torch.Tensor,
     labels: torch.Tensor,
@@ -655,10 +656,6 @@ class TacoMaskDataset(Dataset):
                 continue
             boxes = boxes_from_masks(mask.unsqueeze(0))
             if bool(valid_box_mask(boxes).item()):
-
-
-             if polygon_to_mask(segmentation, width, height) is not None:
-
                 return True
 
         return False
@@ -726,20 +723,6 @@ class TacoMaskDataset(Dataset):
         if mask_tensor.numel() == 0:
             raise ValueError(f"No valid positive-area boxes found for {image_path}.")
 
-        if self.train and random.random() < self.flip_probability:
-            image_tensor = F.hflip(image_tensor)
-            mask_tensor = torch.flip(mask_tensor, dims=[2])
-            mask_tensor, label_tensor, box_tensor, area_tensor = filter_instances_with_valid_boxes(
-                mask_tensor,
-                label_tensor,
-            )
-            if mask_tensor.numel() == 0:
-                raise ValueError(f"No valid positive-area boxes found after augmentation for {image_path}.")
-
-
-        label_tensor = torch.tensor(labels, dtype=torch.int64)
-        mask_tensor = torch.stack(masks)
-
         if self.train:
             original_image = image_tensor
             original_masks = mask_tensor
@@ -766,8 +749,12 @@ class TacoMaskDataset(Dataset):
                 mask_tensor = original_masks
                 label_tensor = original_labels
 
-        box_tensor = boxes_from_masks(mask_tensor)
-        area_tensor = mask_tensor.flatten(1).sum(dim=1).to(torch.float32)
+        mask_tensor, label_tensor, box_tensor, area_tensor = filter_instances_with_valid_boxes(
+            mask_tensor,
+            label_tensor,
+        )
+        if mask_tensor.numel() == 0:
+            raise ValueError(f"No valid positive-area boxes found after augmentation for {image_path}.")
         iscrowd = torch.zeros((len(label_tensor),), dtype=torch.int64)
 
         target = {
@@ -834,6 +821,33 @@ def move_targets_to_device(
     return [{key: value.to(device) for key, value in target.items()} for target in targets]
 
 
+def filter_targets_with_valid_boxes(
+    images: list[torch.Tensor],
+    targets: list[dict[str, torch.Tensor]],
+) -> tuple[list[torch.Tensor], list[dict[str, torch.Tensor]]]:
+    filtered_images: list[torch.Tensor] = []
+    filtered_targets: list[dict[str, torch.Tensor]] = []
+    for image, target in zip(images, targets):
+        keep = valid_box_mask(target["boxes"])
+        if not bool(keep.any().item()):
+            continue
+        if bool(keep.all().item()):
+            filtered_images.append(image)
+            filtered_targets.append(target)
+            continue
+
+        filtered_target = target.copy()
+        filtered_target["boxes"] = target["boxes"][keep]
+        filtered_target["labels"] = target["labels"][keep]
+        filtered_target["masks"] = target["masks"][keep]
+        filtered_target["area"] = target["area"][keep]
+        filtered_target["iscrowd"] = target["iscrowd"][keep]
+        filtered_images.append(image)
+        filtered_targets.append(filtered_target)
+
+    return filtered_images, filtered_targets
+
+
 def train_one_epoch(
     model: torch.nn.Module,
     loader: DataLoader,
@@ -847,6 +861,9 @@ def train_one_epoch(
     for images, targets in loader:
         images = [image.to(device) for image in images]
         targets = move_targets_to_device(targets, device)
+        images, targets = filter_targets_with_valid_boxes(images, targets)
+        if not targets:
+            continue
         optimizer.zero_grad(set_to_none=True)
         losses = model(images, targets)
         loss = sum(loss_value for loss_value in losses.values())
@@ -872,6 +889,9 @@ def evaluate_loss(
     for images, targets in loader:
         images = [image.to(device) for image in images]
         targets = move_targets_to_device(targets, device)
+        images, targets = filter_targets_with_valid_boxes(images, targets)
+        if not targets:
+            continue
         losses = model(images, targets)
         loss = sum(loss_value for loss_value in losses.values())
         total_loss += float(loss.item())
@@ -1245,10 +1265,12 @@ def main() -> None:
     images, targets = next(iter(train_loader))
     with torch.no_grad():
         model.train()
-        smoke_losses = model(
-            [image.to(device) for image in images[:1]],
-            move_targets_to_device(targets[:1], device),
-        )
+        smoke_images = [image.to(device) for image in images[:1]]
+        smoke_targets = move_targets_to_device(targets[:1], device)
+        smoke_images, smoke_targets = filter_targets_with_valid_boxes(smoke_images, smoke_targets)
+        if not smoke_targets:
+            raise ValueError("Smoke batch did not contain any valid positive-area boxes.")
+        smoke_losses = model(smoke_images, smoke_targets)
     print(f"Smoke loss keys: {sorted(smoke_losses)}")
     if args.check_only:
         print("Check complete. No training was run.")
