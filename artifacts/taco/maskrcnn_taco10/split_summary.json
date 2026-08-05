@@ -1,0 +1,18 @@
+{
+  "train_images": 1050,
+  "val_images": 225,
+  "test_images": 225,
+  "classes": [
+    "background",
+    "Bottle",
+    "Bottle cap",
+    "Can",
+    "Cigarette",
+    "Cup",
+    "Lid",
+    "Other Litter",
+    "Plastic bag + wrapper",
+    "Pop tab",
+    "Straw"
+  ]
+}

@@ -1,0 +1,15 @@
+[
+  {
+    "image_id": 138,
+    "detections": [
+      {
+        "label": "Can",
+        "score": 0.8813782930374146
+      },
+      {
+        "label": "Cigarette",
+        "score": 0.5988528728485107
+      }
+    ]
+  }
+]

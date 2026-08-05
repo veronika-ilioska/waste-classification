@@ -1,0 +1,32 @@
+[
+  {
+    "image_id": 138,
+    "detections": [
+      {
+        "label": "Can",
+        "score": 0.731921911239624
+      },
+      {
+        "label": "Cigarette",
+        "score": 0.7259091138839722
+      },
+      {
+        "label": "Cigarette",
+        "score": 0.5551412105560303
+      },
+      {
+        "label": "Other Litter",
+        "score": 0.5198487043380737
+      }
+    ]
+  },
+  {
+    "image_id": 468,
+    "detections": [
+      {
+        "label": "Bottle",
+        "score": 0.7924437522888184
+      }
+    ]
+  }
+]
