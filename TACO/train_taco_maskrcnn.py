@@ -134,6 +134,8 @@ class Config:
     noise_probability: float
     noise_std: float
     evaluation_score_threshold: float
+    cross_validation: bool
+    folds: int
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -188,6 +190,7 @@ def load_config(config_path: Path) -> Config:
     training = section(raw, "training")
     augmentation = section(raw, "augmentation")
     evaluation = section(raw, "evaluation")
+    cross_validation = section(raw, "cross_validation")
 
     return Config(
         dataset_dir=optional_path(dataset.get("dir")),
@@ -222,6 +225,8 @@ def load_config(config_path: Path) -> Config:
         noise_probability=float(augmentation.get("noise_probability", 0.0)),
         noise_std=float(augmentation.get("noise_std", 0.0)),
         evaluation_score_threshold=float(evaluation.get("score_threshold", 0.001)),
+        cross_validation=bool(cross_validation.get("enabled", False)),
+        folds=int(cross_validation.get("folds", 4)),
     )
 
 
@@ -256,6 +261,13 @@ def parse_args(config: Config, config_path: Path) -> argparse.Namespace:
     parser.add_argument("--test-fraction", type=float, default=config.test_fraction)
     parser.add_argument("--patience", type=int, default=config.patience)
     parser.add_argument("--device", default=config.device)
+    parser.add_argument(
+        "--cross-validation",
+        action=argparse.BooleanOptionalAction,
+        default=config.cross_validation,
+        help="Train/evaluate rotated folds instead of one random train/val/test split.",
+    )
+    parser.add_argument("--folds", type=int, default=config.folds)
     parser.add_argument(
         "--evaluation-score-threshold",
         type=float,
@@ -423,6 +435,144 @@ def split_records(
     val = shuffled[train_count : train_count + val_count]
     test = shuffled[train_count + val_count :]
     return train, val, test
+
+
+def record_label_counts(
+    record: dict[str, Any],
+    annotations_by_image: dict[int, list[dict[str, Any]]],
+    raw_id_to_label: dict[int, int],
+    class_count: int,
+) -> list[int]:
+    counts = [0] * class_count
+    for annotation in annotations_by_image.get(int(record["id"]), []):
+        raw_category_id = int(annotation.get("category_id", -1))
+        label = raw_id_to_label.get(raw_category_id)
+        if label is not None and 0 <= label < class_count:
+            counts[label] += 1
+    return counts
+
+
+def split_records_into_folds(
+    records: list[dict[str, Any]],
+    annotations_by_image: dict[int, list[dict[str, Any]]],
+    raw_id_to_label: dict[int, int],
+    class_count: int,
+    folds: int,
+    seed: int,
+) -> list[list[dict[str, Any]]]:
+    annotated = [record for record in records if annotations_by_image.get(int(record["id"]))]
+    if folds < 2:
+        raise ValueError("--folds must be at least 2.")
+    if len(annotated) < folds:
+        raise ValueError(f"Need at least {folds} annotated images for {folds}-fold evaluation.")
+
+    rng = random.Random(seed)
+    buckets: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for record in annotated:
+        counts = record_label_counts(record, annotations_by_image, raw_id_to_label, class_count)
+        bucket = max(range(1, class_count), key=lambda index: counts[index]) if sum(counts) else 0
+        buckets[bucket].append(record)
+
+    fold_records: list[list[dict[str, Any]]] = [[] for _ in range(folds)]
+    for bucket_index, bucket_records in sorted(buckets.items()):
+        rng.shuffle(bucket_records)
+        start_fold = bucket_index % folds
+        for offset, record in enumerate(bucket_records):
+            fold_index = min(
+                range(folds),
+                key=lambda index: (
+                    len(fold_records[index]),
+                    (index - start_fold - offset) % folds,
+                ),
+            )
+            fold_records[fold_index].append(record)
+
+    if any(not fold for fold in fold_records):
+        raise ValueError("Could not create non-empty folds. Try fewer folds.")
+    return [sorted(fold, key=lambda record: int(record["id"])) for fold in fold_records]
+
+
+def split_records_preserving_distribution(
+    records: list[dict[str, Any]],
+    annotations_by_image: dict[int, list[dict[str, Any]]],
+    raw_id_to_label: dict[int, int],
+    class_count: int,
+    val_fraction: float,
+    test_fraction: float,
+    seed: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    if val_fraction < 0 or test_fraction < 0 or val_fraction + test_fraction >= 1:
+        raise ValueError("--val-fraction and --test-fraction must be nonnegative and sum below 1.")
+
+    annotated = [record for record in records if annotations_by_image.get(int(record["id"]))]
+    if not annotated:
+        raise ValueError("No annotated TACO images were found.")
+
+    rng = random.Random(seed)
+    buckets: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for record in annotated:
+        counts = record_label_counts(record, annotations_by_image, raw_id_to_label, class_count)
+        bucket = max(range(1, class_count), key=lambda index: counts[index]) if sum(counts) else 0
+        buckets[bucket].append(record)
+
+    train: list[dict[str, Any]] = []
+    val: list[dict[str, Any]] = []
+    test: list[dict[str, Any]] = []
+    for bucket_records in buckets.values():
+        rng.shuffle(bucket_records)
+        total = len(bucket_records)
+        test_count = int(round(total * test_fraction)) if test_fraction else 0
+        val_count = int(round(total * val_fraction)) if val_fraction else 0
+        if total >= 3:
+            if test_fraction and test_count == 0:
+                test_count = 1
+            if val_fraction and val_count == 0:
+                val_count = 1
+        if test_count + val_count >= total:
+            overflow = test_count + val_count - total + 1
+            if val_count >= test_count:
+                val_count = max(0, val_count - overflow)
+            else:
+                test_count = max(0, test_count - overflow)
+
+        test.extend(bucket_records[:test_count])
+        val.extend(bucket_records[test_count : test_count + val_count])
+        train.extend(bucket_records[test_count + val_count :])
+
+    if not train or not val or not test:
+        return split_records(annotated, annotations_by_image, val_fraction, test_fraction, seed)
+
+    return (
+        sorted(train, key=lambda record: int(record["id"])),
+        sorted(val, key=lambda record: int(record["id"])),
+        sorted(test, key=lambda record: int(record["id"])),
+    )
+
+
+def summarize_record_distribution(
+    records: list[dict[str, Any]],
+    annotations_by_image: dict[int, list[dict[str, Any]]],
+    raw_id_to_label: dict[int, int],
+    class_names: list[str],
+) -> dict[str, Any]:
+    counts = [0] * len(class_names)
+    for record in records:
+        record_counts = record_label_counts(
+            record,
+            annotations_by_image,
+            raw_id_to_label,
+            len(class_names),
+        )
+        for index, count in enumerate(record_counts):
+            counts[index] += count
+    return {
+        "images": len(records),
+        "annotations_per_class": {
+            class_names[index]: count
+            for index, count in enumerate(counts)
+            if index != 0
+        },
+    }
 
 
 def polygon_to_mask(
@@ -1156,68 +1306,97 @@ def save_split_summary(
     )
 
 
-def main() -> None:
-    config_path = parse_config_path()
-    config = load_config(config_path)
-    args = parse_args(config, config_path)
-    set_seed(args.seed)
-
-    dataset_dir = resolve_dataset_dir(args.dataset_dir, args.annotation_file)
-    coco = load_coco_annotations(dataset_dir, args.annotation_file)
-    raw_id_to_label, class_names = build_category_map(
-        coco["categories"],
-        args.taxonomy,
-        args.category_field,
-    )
-    annotations_by_image = collect_annotations_by_image(coco["annotations"])
-    records = collect_image_records(coco, dataset_dir, config.image_extensions)
-    train_records, val_records, test_records = split_records(
+def make_taco_dataset(
+    records: list[dict[str, Any]],
+    annotations_by_image: dict[int, list[dict[str, Any]]],
+    raw_id_to_label: dict[int, int],
+    dataset_dir: Path,
+    config: Config,
+    train: bool,
+) -> TacoMaskDataset:
+    return TacoMaskDataset(
         records,
         annotations_by_image,
-        args.val_fraction,
-        args.test_fraction,
-        args.seed,
+        raw_id_to_label,
+        dataset_dir,
+        train=train,
+        flip_probability=config.horizontal_flip_probability if train else 0.0,
+        rotation_degrees=config.rotation_degrees if train else 0.0,
+        object_crop_probability=config.object_crop_probability if train else 0.0,
+        object_crop_scale=config.object_crop_scale,
+        brightness=config.brightness if train else 0.0,
+        contrast=config.contrast if train else 0.0,
+        saturation=config.saturation if train else 0.0,
+        hue=config.hue if train else 0.0,
+        blur_probability=config.blur_probability if train else 0.0,
+        blur_kernel_size=config.blur_kernel_size,
+        noise_probability=config.noise_probability if train else 0.0,
+        noise_std=config.noise_std if train else 0.0,
     )
 
-    train_dataset = TacoMaskDataset(
+
+def average_coco_metrics(fold_summaries: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
+    averaged: dict[str, dict[str, float]] = {}
+    for metric_type in ("segm", "bbox"):
+        keys = sorted(
+            {
+                key
+                for summary in fold_summaries
+                for key in summary["coco_metrics"][metric_type]
+            }
+        )
+        averaged[metric_type] = {
+            key: float(
+                sum(summary["coco_metrics"][metric_type][key] for summary in fold_summaries)
+                / len(fold_summaries)
+            )
+            for key in keys
+        }
+    return averaged
+
+
+def run_training_split(
+    args: argparse.Namespace,
+    config: Config,
+    dataset_dir: Path,
+    annotations_by_image: dict[int, list[dict[str, Any]]],
+    raw_id_to_label: dict[int, int],
+    class_names: list[str],
+    train_records: list[dict[str, Any]],
+    val_records: list[dict[str, Any]],
+    test_records: list[dict[str, Any]],
+    output_dir: Path,
+    device: torch.device,
+    split_name: str,
+) -> dict[str, Any]:
+    train_dataset = make_taco_dataset(
         train_records,
         annotations_by_image,
         raw_id_to_label,
         dataset_dir,
+        config,
         train=True,
-        flip_probability=config.horizontal_flip_probability,
-        rotation_degrees=config.rotation_degrees,
-        object_crop_probability=config.object_crop_probability,
-        object_crop_scale=config.object_crop_scale,
-        brightness=config.brightness,
-        contrast=config.contrast,
-        saturation=config.saturation,
-        hue=config.hue,
-        blur_probability=config.blur_probability,
-        blur_kernel_size=config.blur_kernel_size,
-        noise_probability=config.noise_probability,
-        noise_std=config.noise_std,
     )
-    val_dataset = TacoMaskDataset(
+    val_dataset = make_taco_dataset(
         val_records,
         annotations_by_image,
         raw_id_to_label,
         dataset_dir,
+        config,
         train=False,
-        flip_probability=0.0,
     )
-    test_dataset = TacoMaskDataset(
+    test_dataset = make_taco_dataset(
         test_records,
         annotations_by_image,
         raw_id_to_label,
         dataset_dir,
+        config,
         train=False,
-        flip_probability=0.0,
     )
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     save_split_summary(
-        args.output_dir,
+        output_dir,
         train_records,
         val_records,
         test_records,
@@ -1226,12 +1405,11 @@ def main() -> None:
         val_dataset,
         test_dataset,
     )
-    (args.output_dir / "labels.json").write_text(
+    (output_dir / "labels.json").write_text(
         json.dumps(class_names, indent=2),
         encoding="utf-8",
     )
 
-    device = resolve_device(args.device)
     model = build_model(
         num_classes=len(class_names),
         pretrained=config.pretrained and not args.no_pretrained,
@@ -1242,11 +1420,8 @@ def main() -> None:
     val_loader = make_loader(val_dataset, args.batch_size, shuffle=False, workers=args.workers)
     test_loader = make_loader(test_dataset, args.batch_size, shuffle=False, workers=args.workers)
 
-    print(f"Dataset root: {dataset_dir}")
-    print(f"Device: {describe_device(device)}")
-    print(f"Classes ({len(class_names)} including background): {class_names}")
     print(
-        "Split sizes: "
+        f"{split_name} split sizes: "
         f"train={len(train_dataset)} val={len(val_dataset)} test={len(test_dataset)}"
     )
     skipped_invalid = (
@@ -1256,7 +1431,7 @@ def main() -> None:
     )
     if skipped_invalid:
         print(
-            "Skipped images without valid polygon masks: "
+            f"{split_name} skipped images without valid polygon masks: "
             f"train={train_dataset.skipped_invalid_mask_count} "
             f"val={val_dataset.skipped_invalid_mask_count} "
             f"test={test_dataset.skipped_invalid_mask_count}"
@@ -1271,10 +1446,16 @@ def main() -> None:
         if not smoke_targets:
             raise ValueError("Smoke batch did not contain any valid positive-area boxes.")
         smoke_losses = model(smoke_images, smoke_targets)
-    print(f"Smoke loss keys: {sorted(smoke_losses)}")
+    print(f"{split_name} smoke loss keys: {sorted(smoke_losses)}")
     if args.check_only:
-        print("Check complete. No training was run.")
-        return
+        return {
+            "output_dir": str(output_dir),
+            "split_summary": {
+                "train_images": len(train_dataset),
+                "val_images": len(val_dataset),
+                "test_images": len(test_dataset),
+            },
+        }
 
     optimizer = torch.optim.SGD(
         [parameter for parameter in model.parameters() if parameter.requires_grad],
@@ -1294,22 +1475,22 @@ def main() -> None:
         history["loss"].append(train_loss)
         history["val_loss"].append(val_loss)
         print(
-            f"epoch {epoch}/{args.epochs}: "
+            f"{split_name} epoch {epoch}/{args.epochs}: "
             f"loss={train_loss:.4f} val_loss={val_loss:.4f}"
         )
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             patience_counter = 0
-            torch.save(model.state_dict(), args.output_dir / "best_model.pth")
+            torch.save(model.state_dict(), output_dir / "best_model.pth")
         else:
             patience_counter += 1
             if args.patience > 0 and patience_counter >= args.patience:
-                print(f"Early stopping after {epoch} epochs.")
+                print(f"{split_name} early stopping after {epoch} epochs.")
                 break
 
-    if (args.output_dir / "best_model.pth").is_file():
-        model.load_state_dict(torch.load(args.output_dir / "best_model.pth", map_location=device))
+    if (output_dir / "best_model.pth").is_file():
+        model.load_state_dict(torch.load(output_dir / "best_model.pth", map_location=device))
     test_loss = evaluate_loss(model, test_loader, device)
     coco_metrics = evaluate_coco_metrics(
         model,
@@ -1318,25 +1499,202 @@ def main() -> None:
         annotations_by_image,
         raw_id_to_label,
         class_names,
-        args.output_dir,
+        output_dir,
         device,
         args.evaluation_score_threshold,
     )
-    torch.save(model.state_dict(), args.output_dir / "taco_maskrcnn.pth")
-    (args.output_dir / "history.json").write_text(
+    torch.save(model.state_dict(), output_dir / "taco_maskrcnn.pth")
+    (output_dir / "history.json").write_text(
         json.dumps(history, indent=2),
         encoding="utf-8",
     )
-    (args.output_dir / "test_metrics.json").write_text(
+    (output_dir / "test_metrics.json").write_text(
         json.dumps({"loss": float(test_loss), "coco": coco_metrics}, indent=2),
         encoding="utf-8",
     )
-    save_sample_predictions(model, test_loader, class_names, args.output_dir, device)
-    print(f"Test loss: {test_loss:.4f}")
-    print(f"Mask AP: {coco_metrics['segm']['AP']:.4f}")
-    print(f"Mask AP50: {coco_metrics['segm']['AP50']:.4f}")
-    print(f"Mask AP75: {coco_metrics['segm']['AP75']:.4f}")
-    print(f"Saved Mask R-CNN artifacts to {args.output_dir.resolve()}")
+    save_sample_predictions(model, test_loader, class_names, output_dir, device)
+    print(f"{split_name} test loss: {test_loss:.4f}")
+    print(f"{split_name} mask AP: {coco_metrics['segm']['AP']:.4f}")
+    print(f"{split_name} mask AP50: {coco_metrics['segm']['AP50']:.4f}")
+    print(f"{split_name} mask AP75: {coco_metrics['segm']['AP75']:.4f}")
+    print(f"{split_name} artifacts saved to {output_dir.resolve()}")
+
+    return {
+        "output_dir": str(output_dir),
+        "epochs_ran": len(history["loss"]),
+        "best_val_loss": float(best_val_loss),
+        "test_loss": float(test_loss),
+        "coco_metrics": coco_metrics,
+    }
+
+
+def run_cross_validation(
+    args: argparse.Namespace,
+    config: Config,
+    dataset_dir: Path,
+    records: list[dict[str, Any]],
+    annotations_by_image: dict[int, list[dict[str, Any]]],
+    raw_id_to_label: dict[int, int],
+    class_names: list[str],
+    device: torch.device,
+) -> None:
+    folds = split_records_into_folds(
+        records,
+        annotations_by_image,
+        raw_id_to_label,
+        len(class_names),
+        args.folds,
+        args.seed,
+    )
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    fold_summaries: list[dict[str, Any]] = []
+
+    for fold_index in range(args.folds):
+        fold_records = folds[fold_index]
+        train_records, val_records, test_records = split_records_preserving_distribution(
+            fold_records,
+            annotations_by_image,
+            raw_id_to_label,
+            len(class_names),
+            args.val_fraction,
+            args.test_fraction,
+            args.seed + fold_index,
+        )
+        split_distribution = {
+            "fold": summarize_record_distribution(
+                fold_records,
+                annotations_by_image,
+                raw_id_to_label,
+                class_names,
+            ),
+            "train": summarize_record_distribution(
+                train_records,
+                annotations_by_image,
+                raw_id_to_label,
+                class_names,
+            ),
+            "val": summarize_record_distribution(
+                val_records,
+                annotations_by_image,
+                raw_id_to_label,
+                class_names,
+            ),
+            "test": summarize_record_distribution(
+                test_records,
+                annotations_by_image,
+                raw_id_to_label,
+                class_names,
+            ),
+        }
+        fold_output_dir = args.output_dir / f"fold{fold_index + 1}"
+        print(
+            f"Fold {fold_index + 1}/{args.folds}: "
+            f"{len(fold_records)} total, "
+            f"{len(train_records)} train, {len(val_records)} val, {len(test_records)} test images"
+        )
+        summary = run_training_split(
+            args,
+            config,
+            dataset_dir,
+            annotations_by_image,
+            raw_id_to_label,
+            class_names,
+            train_records,
+            val_records,
+            test_records,
+            fold_output_dir,
+            device,
+            split_name=f"fold {fold_index + 1}",
+        )
+        summary.update(
+            {
+                "fold": fold_index + 1,
+                "split_distribution": split_distribution,
+            }
+        )
+        fold_summaries.append(summary)
+
+    completed = [summary for summary in fold_summaries if "coco_metrics" in summary]
+    average_metrics = average_coco_metrics(completed) if completed else {}
+    cv_summary = {
+        "folds": args.folds,
+        "val_fraction": args.val_fraction,
+        "test_fraction": args.test_fraction,
+        "classes": class_names,
+        "fold_summaries": fold_summaries,
+        "average_coco_metrics": average_metrics,
+        "average_mask_ap": average_metrics.get("segm", {}).get("AP"),
+        "average_bbox_ap": average_metrics.get("bbox", {}).get("AP"),
+    }
+    (args.output_dir / "cross_validation_summary.json").write_text(
+        json.dumps(cv_summary, indent=2),
+        encoding="utf-8",
+    )
+    if args.check_only:
+        print("Cross-validation check complete. No training was run.")
+    else:
+        print(f"Average mask AP: {cv_summary['average_mask_ap']:.4f}")
+        print(f"Average bbox AP: {cv_summary['average_bbox_ap']:.4f}")
+    print(f"Cross-validation summary saved to {args.output_dir / 'cross_validation_summary.json'}")
+
+
+def main() -> None:
+    config_path = parse_config_path()
+    config = load_config(config_path)
+    args = parse_args(config, config_path)
+    set_seed(args.seed)
+
+    dataset_dir = resolve_dataset_dir(args.dataset_dir, args.annotation_file)
+    coco = load_coco_annotations(dataset_dir, args.annotation_file)
+    raw_id_to_label, class_names = build_category_map(
+        coco["categories"],
+        args.taxonomy,
+        args.category_field,
+    )
+    annotations_by_image = collect_annotations_by_image(coco["annotations"])
+    records = collect_image_records(coco, dataset_dir, config.image_extensions)
+
+    device = resolve_device(args.device)
+    print(f"Dataset root: {dataset_dir}")
+    print(f"Device: {describe_device(device)}")
+    print(f"Classes ({len(class_names)} including background): {class_names}")
+
+    if args.cross_validation:
+        run_cross_validation(
+            args,
+            config,
+            dataset_dir,
+            records,
+            annotations_by_image,
+            raw_id_to_label,
+            class_names,
+            device,
+        )
+        return
+
+    train_records, val_records, test_records = split_records(
+        records,
+        annotations_by_image,
+        args.val_fraction,
+        args.test_fraction,
+        args.seed,
+    )
+    run_training_split(
+        args,
+        config,
+        dataset_dir,
+        annotations_by_image,
+        raw_id_to_label,
+        class_names,
+        train_records,
+        val_records,
+        test_records,
+        args.output_dir,
+        device,
+        split_name="single split",
+    )
+    if args.check_only:
+        print("Check complete. No training was run.")
 
 
 if __name__ == "__main__":

@@ -48,3 +48,7 @@ augmentation:
 
 evaluation:
   score_threshold: 0.001
+
+cross_validation:
+  enabled: true
+  folds: 4
