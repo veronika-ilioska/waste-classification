@@ -1,0 +1,15 @@
+[
+  {
+    "image_id": 4,
+    "detections": [
+      {
+        "label": "Plastic bag + wrapper",
+        "score": 0.6162471771240234
+      }
+    ]
+  },
+  {
+    "image_id": 30,
+    "detections": []
+  }
+]

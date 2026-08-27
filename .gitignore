@@ -32,16 +32,31 @@ artifacts/evaluation/*
 !artifacts/evaluation/confusion_matrix_normalized.png
 !artifacts/evaluation/misclassified_examples.png
 
-# Keep selected EcoDetect results
+# Keep selected EcoDetect MobileNetV2 result images
 !artifacts/ecodetect/
+artifacts/ecodetect/*
 !artifacts/ecodetect/mobilenetv2/
+artifacts/ecodetect/mobilenetv2/*
 !artifacts/ecodetect/mobilenetv2/confusion_matrix.png
 !artifacts/ecodetect/mobilenetv2/confusion_matrix_normalized.png
 !artifacts/ecodetect/mobilenetv2/misclassified_examples.png
 
 # Keep TACO Mask R-CNN results
 !artifacts/taco/
-!artifacts/taco/**
+artifacts/taco/*
+!artifacts/taco/maskrcnn_taco10/
+artifacts/taco/maskrcnn_taco10/*
+!artifacts/taco/maskrcnn_taco10/labels.json
+!artifacts/taco/maskrcnn_taco10/split_summary.json
+!artifacts/taco/maskrcnn_taco10/cross_validation_summary.json
+!artifacts/taco/maskrcnn_taco10/fold*/
+artifacts/taco/maskrcnn_taco10/fold*/*
+!artifacts/taco/maskrcnn_taco10/fold*/coco_metrics.json
+!artifacts/taco/maskrcnn_taco10/fold*/history.json
+!artifacts/taco/maskrcnn_taco10/fold*/labels.json
+!artifacts/taco/maskrcnn_taco10/fold*/sample_predictions.json
+!artifacts/taco/maskrcnn_taco10/fold*/split_summary.json
+!artifacts/taco/maskrcnn_taco10/fold*/test_metrics.json
 checkpoints/
 logs/
 *.keras

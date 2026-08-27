@@ -1,0 +1,24 @@
+[
+  {
+    "image_id": 51,
+    "detections": [
+      {
+        "label": "Other Litter",
+        "score": 0.7165766358375549
+      }
+    ]
+  },
+  {
+    "image_id": 54,
+    "detections": [
+      {
+        "label": "Other Litter",
+        "score": 0.6735071539878845
+      },
+      {
+        "label": "Plastic bag + wrapper",
+        "score": 0.6369981169700623
+      }
+    ]
+  }
+]

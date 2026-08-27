@@ -1,0 +1,448 @@
+{
+  "folds": 4,
+  "val_fraction": 0.15,
+  "test_fraction": 0.15,
+  "classes": [
+    "background",
+    "Bottle",
+    "Bottle cap",
+    "Can",
+    "Cigarette",
+    "Cup",
+    "Lid",
+    "Other Litter",
+    "Plastic bag + wrapper",
+    "Pop tab",
+    "Straw"
+  ],
+  "fold_summaries": [
+    {
+      "output_dir": "artifacts/taco/maskrcnn_taco10/fold1",
+      "epochs_ran": 18,
+      "best_val_loss": 0.6691535285540989,
+      "test_loss": 0.6137468119462332,
+      "coco_metrics": {
+        "segm": {
+          "AP": 0.19792192688615023,
+          "AP50": 0.26085174481470474,
+          "AP75": 0.21934300577097018,
+          "AP_small": 0.014851485148514847,
+          "AP_medium": 0.20863183914417338,
+          "AP_large": 0.328274320829466,
+          "AR_max1": 0.3314454212454212,
+          "AR_max10": 0.4797157509157509,
+          "AR_max100": 0.48130036630036627,
+          "AR_small": 0.014285714285714285,
+          "AR_medium": 0.3203125,
+          "AR_large": 0.7309585652442795
+        },
+        "bbox": {
+          "AP": 0.1730640823168402,
+          "AP50": 0.26296693563401136,
+          "AP75": 0.19799330549757416,
+          "AP_small": 0.12648514851485146,
+          "AP_medium": 0.23226602583522882,
+          "AP_large": 0.27697227467250546,
+          "AR_max1": 0.2918402930402931,
+          "AR_max10": 0.43031959706959705,
+          "AR_max100": 0.43031959706959705,
+          "AR_small": 0.1244047619047619,
+          "AR_medium": 0.3288690476190476,
+          "AR_large": 0.6237507730364874
+        }
+      },
+      "fold": 1,
+      "split_distribution": {
+        "fold": {
+          "images": 375,
+          "annotations_per_class": {
+            "Bottle": 103,
+            "Bottle cap": 69,
+            "Can": 56,
+            "Cigarette": 136,
+            "Cup": 50,
+            "Lid": 23,
+            "Other Litter": 450,
+            "Plastic bag + wrapper": 203,
+            "Pop tab": 16,
+            "Straw": 31
+          }
+        },
+        "train": {
+          "images": 265,
+          "annotations_per_class": {
+            "Bottle": 75,
+            "Bottle cap": 49,
+            "Can": 42,
+            "Cigarette": 87,
+            "Cup": 38,
+            "Lid": 16,
+            "Other Litter": 346,
+            "Plastic bag + wrapper": 147,
+            "Pop tab": 9,
+            "Straw": 23
+          }
+        },
+        "val": {
+          "images": 55,
+          "annotations_per_class": {
+            "Bottle": 15,
+            "Bottle cap": 12,
+            "Can": 7,
+            "Cigarette": 34,
+            "Cup": 6,
+            "Lid": 3,
+            "Other Litter": 52,
+            "Plastic bag + wrapper": 31,
+            "Pop tab": 6,
+            "Straw": 4
+          }
+        },
+        "test": {
+          "images": 55,
+          "annotations_per_class": {
+            "Bottle": 13,
+            "Bottle cap": 8,
+            "Can": 7,
+            "Cigarette": 15,
+            "Cup": 6,
+            "Lid": 4,
+            "Other Litter": 52,
+            "Plastic bag + wrapper": 25,
+            "Pop tab": 1,
+            "Straw": 4
+          }
+        }
+      }
+    },
+    {
+      "output_dir": "artifacts/taco/maskrcnn_taco10/fold2",
+      "epochs_ran": 14,
+      "best_val_loss": 0.802044542240245,
+      "test_loss": 0.5918103504393782,
+      "coco_metrics": {
+        "segm": {
+          "AP": 0.2257543651064201,
+          "AP50": 0.33078204688417856,
+          "AP75": 0.25835808901147583,
+          "AP_small": 0.01974769845405593,
+          "AP_medium": 0.07285597275027086,
+          "AP_large": 0.30011209122357774,
+          "AR_max1": 0.2730738453385512,
+          "AR_max10": 0.407086237821532,
+          "AR_max100": 0.4157189882189883,
+          "AR_small": 0.0375,
+          "AR_medium": 0.35166666666666674,
+          "AR_large": 0.5366988727858294
+        },
+        "bbox": {
+          "AP": 0.22028218586340223,
+          "AP50": 0.3268876535027437,
+          "AP75": 0.2612336562134619,
+          "AP_small": 0.03445731365589389,
+          "AP_medium": 0.07006874828637784,
+          "AP_large": 0.2790023093904434,
+          "AR_max1": 0.2717906526435938,
+          "AR_max10": 0.38801392116097994,
+          "AR_max100": 0.39849086869675104,
+          "AR_small": 0.07916666666666668,
+          "AR_medium": 0.3075,
+          "AR_large": 0.4730771052382305
+        }
+      },
+      "fold": 2,
+      "split_distribution": {
+        "fold": {
+          "images": 375,
+          "annotations_per_class": {
+            "Bottle": 119,
+            "Bottle cap": 73,
+            "Can": 83,
+            "Cigarette": 218,
+            "Cup": 45,
+            "Lid": 21,
+            "Other Litter": 487,
+            "Plastic bag + wrapper": 233,
+            "Pop tab": 42,
+            "Straw": 65
+          }
+        },
+        "train": {
+          "images": 263,
+          "annotations_per_class": {
+            "Bottle": 87,
+            "Bottle cap": 44,
+            "Can": 57,
+            "Cigarette": 176,
+            "Cup": 30,
+            "Lid": 15,
+            "Other Litter": 356,
+            "Plastic bag + wrapper": 164,
+            "Pop tab": 33,
+            "Straw": 54
+          }
+        },
+        "val": {
+          "images": 56,
+          "annotations_per_class": {
+            "Bottle": 19,
+            "Bottle cap": 19,
+            "Can": 9,
+            "Cigarette": 22,
+            "Cup": 10,
+            "Lid": 4,
+            "Other Litter": 94,
+            "Plastic bag + wrapper": 39,
+            "Pop tab": 2,
+            "Straw": 6
+          }
+        },
+        "test": {
+          "images": 56,
+          "annotations_per_class": {
+            "Bottle": 13,
+            "Bottle cap": 10,
+            "Can": 17,
+            "Cigarette": 20,
+            "Cup": 5,
+            "Lid": 2,
+            "Other Litter": 37,
+            "Plastic bag + wrapper": 30,
+            "Pop tab": 7,
+            "Straw": 5
+          }
+        }
+      }
+    },
+    {
+      "output_dir": "artifacts/taco/maskrcnn_taco10/fold3",
+      "epochs_ran": 13,
+      "best_val_loss": 0.700312400502818,
+      "test_loss": 0.523820048464196,
+      "coco_metrics": {
+        "segm": {
+          "AP": 0.28635676650285036,
+          "AP50": 0.3675120600069096,
+          "AP75": 0.31075014109089605,
+          "AP_small": 0.11540649406555563,
+          "AP_medium": 0.2871599120952855,
+          "AP_large": 0.366652624935333,
+          "AR_max1": 0.3309380659990416,
+          "AR_max10": 0.4793770457185091,
+          "AR_max100": 0.4793770457185091,
+          "AR_small": 0.2,
+          "AR_medium": 0.3809833024118738,
+          "AR_large": 0.5815659730133415
+        },
+        "bbox": {
+          "AP": 0.27506388334482984,
+          "AP50": 0.39037040993824457,
+          "AP75": 0.3065443918692094,
+          "AP_small": 0.1670792079207921,
+          "AP_medium": 0.3072957872325,
+          "AP_large": 0.35883197249978,
+          "AR_max1": 0.31531895340431926,
+          "AR_max10": 0.4585644863266814,
+          "AR_max100": 0.45905229120473023,
+          "AR_small": 0.26666666666666666,
+          "AR_medium": 0.413265306122449,
+          "AR_large": 0.5654032492848282
+        }
+      },
+      "fold": 3,
+      "split_distribution": {
+        "fold": {
+          "images": 375,
+          "annotations_per_class": {
+            "Bottle": 114,
+            "Bottle cap": 77,
+            "Can": 65,
+            "Cigarette": 169,
+            "Cup": 49,
+            "Lid": 23,
+            "Other Litter": 417,
+            "Plastic bag + wrapper": 210,
+            "Pop tab": 17,
+            "Straw": 39
+          }
+        },
+        "train": {
+          "images": 263,
+          "annotations_per_class": {
+            "Bottle": 82,
+            "Bottle cap": 61,
+            "Can": 49,
+            "Cigarette": 130,
+            "Cup": 37,
+            "Lid": 18,
+            "Other Litter": 322,
+            "Plastic bag + wrapper": 149,
+            "Pop tab": 13,
+            "Straw": 30
+          }
+        },
+        "val": {
+          "images": 56,
+          "annotations_per_class": {
+            "Bottle": 21,
+            "Bottle cap": 12,
+            "Can": 8,
+            "Cigarette": 26,
+            "Cup": 5,
+            "Lid": 4,
+            "Other Litter": 54,
+            "Plastic bag + wrapper": 40,
+            "Pop tab": 3,
+            "Straw": 4
+          }
+        },
+        "test": {
+          "images": 56,
+          "annotations_per_class": {
+            "Bottle": 11,
+            "Bottle cap": 4,
+            "Can": 8,
+            "Cigarette": 13,
+            "Cup": 7,
+            "Lid": 1,
+            "Other Litter": 41,
+            "Plastic bag + wrapper": 21,
+            "Pop tab": 1,
+            "Straw": 5
+          }
+        }
+      }
+    },
+    {
+      "output_dir": "artifacts/taco/maskrcnn_taco10/fold4",
+      "epochs_ran": 10,
+      "best_val_loss": 0.652451220367636,
+      "test_loss": 0.7070275954902172,
+      "coco_metrics": {
+        "segm": {
+          "AP": 0.1526946960894515,
+          "AP50": 0.20998119175403948,
+          "AP75": 0.16972374107350915,
+          "AP_small": 0.06382013201320132,
+          "AP_medium": 0.1176300564360573,
+          "AP_large": 0.1811188374176153,
+          "AR_max1": 0.23522204184704182,
+          "AR_max10": 0.3494979256854257,
+          "AR_max100": 0.3511645923520923,
+          "AR_small": 0.07083333333333333,
+          "AR_medium": 0.18224496426250814,
+          "AR_large": 0.42077052577052576
+        },
+        "bbox": {
+          "AP": 0.13862830800770717,
+          "AP50": 0.21489453834122343,
+          "AP75": 0.16147384211046717,
+          "AP_small": 0.07644389438943894,
+          "AP_medium": 0.11748780279240384,
+          "AP_large": 0.16368106171482236,
+          "AR_max1": 0.21767216810966808,
+          "AR_max10": 0.32770689033189027,
+          "AR_max100": 0.3295402236652237,
+          "AR_small": 0.08333333333333334,
+          "AR_medium": 0.1788986354775829,
+          "AR_large": 0.3931746031746031
+        }
+      },
+      "fold": 4,
+      "split_distribution": {
+        "fold": {
+          "images": 375,
+          "annotations_per_class": {
+            "Bottle": 103,
+            "Bottle cap": 70,
+            "Can": 69,
+            "Cigarette": 144,
+            "Cup": 48,
+            "Lid": 20,
+            "Other Litter": 373,
+            "Plastic bag + wrapper": 204,
+            "Pop tab": 24,
+            "Straw": 26
+          }
+        },
+        "train": {
+          "images": 263,
+          "annotations_per_class": {
+            "Bottle": 72,
+            "Bottle cap": 50,
+            "Can": 52,
+            "Cigarette": 104,
+            "Cup": 30,
+            "Lid": 9,
+            "Other Litter": 253,
+            "Plastic bag + wrapper": 147,
+            "Pop tab": 16,
+            "Straw": 18
+          }
+        },
+        "val": {
+          "images": 56,
+          "annotations_per_class": {
+            "Bottle": 15,
+            "Bottle cap": 10,
+            "Can": 6,
+            "Cigarette": 22,
+            "Cup": 7,
+            "Lid": 4,
+            "Other Litter": 60,
+            "Plastic bag + wrapper": 25,
+            "Pop tab": 4,
+            "Straw": 4
+          }
+        },
+        "test": {
+          "images": 56,
+          "annotations_per_class": {
+            "Bottle": 16,
+            "Bottle cap": 10,
+            "Can": 11,
+            "Cigarette": 18,
+            "Cup": 11,
+            "Lid": 7,
+            "Other Litter": 60,
+            "Plastic bag + wrapper": 32,
+            "Pop tab": 4,
+            "Straw": 4
+          }
+        }
+      }
+    }
+  ],
+  "average_coco_metrics": {
+    "segm": {
+      "AP": 0.21568193864621804,
+      "AP50": 0.2922817608649581,
+      "AP75": 0.23954374423671282,
+      "AP_large": 0.29403946860149804,
+      "AP_medium": 0.17156944510644678,
+      "AP_small": 0.053456452420331924,
+      "AR_large": 0.567498484203494,
+      "AR_max1": 0.29266984360751397,
+      "AR_max10": 0.42891924003530446,
+      "AR_max100": 0.431890248147489,
+      "AR_medium": 0.3088018583352622,
+      "AR_small": 0.0806547619047619
+    },
+    "bbox": {
+      "AP": 0.20175961488319485,
+      "AP50": 0.2987798843540558,
+      "AP75": 0.23181129892267816,
+      "AP_large": 0.2696219045693878,
+      "AP_medium": 0.1817795910366276,
+      "AP_small": 0.10111639112024409,
+      "AR_large": 0.5138514326835373,
+      "AR_max1": 0.27415551679946853,
+      "AR_max10": 0.4011512237222872,
+      "AR_max100": 0.4043507451590755,
+      "AR_medium": 0.3071332473047699,
+      "AR_small": 0.13839285714285715
+    }
+  },
+  "average_mask_ap": 0.21568193864621804,
+  "average_bbox_ap": 0.20175961488319485
+}
