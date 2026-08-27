@@ -232,6 +232,37 @@ both masks and boxes. The main segmentation values are written to
 `segm.AP75`. This requires `pycocotools`, which is included in
 `requirements.txt`.
 
+### TACO Mask R-CNN Cross-Validation Results
+
+The saved TACO-10 run used 4-fold cross validation. Within each fold, the
+fold's images were split into 70% training, 15% validation, and 15% test data.
+The overall summary is saved in
+[`cross_validation_summary.json`](artifacts/taco/maskrcnn_taco10/cross_validation_summary.json).
+
+| Fold | Epochs run | Mask AP | Mask AP50 | Mask AP75 | Bbox AP |
+|---|---:|---:|---:|---:|---:|
+| 1 | 18 | 19.79% | 26.09% | 21.93% | 17.31% |
+| 2 | 14 | 22.58% | 33.08% | 25.84% | 22.03% |
+| 3 | 13 | 28.64% | 36.75% | 31.08% | 27.51% |
+| 4 | 10 | 15.27% | 21.00% | 16.97% | 13.86% |
+| **Average** |  | **21.57%** | **29.23%** | **23.95%** | **20.18%** |
+
+The TACO paper reports TACO-10 mask AP from a 4-fold Mask R-CNN evaluation with
+three prediction-ranking scores:
+
+| Evaluation | TACO-10 AP |
+|---|---:|
+| Paper, class score | 17.6 +/- 1.6 |
+| Paper, litter score | 18.4 +/- 1.5 |
+| Paper, ratio score | 19.4 +/- 1.5 |
+| This repository, COCO class-score-style mask AP | **21.57** |
+
+Numerically, this saved run is above the paper's best reported TACO-10 result
+by about 2.2 AP points. Treat the comparison as indicative rather than a strict
+reproduction: the paper used 80%/10%/10% train/validation/test splits inside
+each fold and compared custom ranking scores, while this run uses 70%/15%/15%
+splits and the standard COCO prediction scores emitted by Torchvision.
+
 ## EcoDetect Model Comparison
 
 The EcoDetect runs compare three image-level MobileNet classifiers with one
