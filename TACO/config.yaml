@@ -1,6 +1,4 @@
 dataset:
-  # Download TACO with the upstream repo first, then point this at the folder
-  # containing annotations.json and the batch_* image directories.
   dir: datasets/TACO/data
   annotation_file: annotations.json
   image_extensions:
@@ -11,7 +9,7 @@ dataset:
   category_field: supercategory
 
 output:
-  dir: artifacts/taco/maskrcnn_taco10
+  dir: artifacts/taco/maskrcnn_taco10_70
 
 model:
   pretrained: true

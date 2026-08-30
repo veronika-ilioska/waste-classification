@@ -234,10 +234,19 @@ both masks and boxes. The main segmentation values are written to
 
 ### TACO Mask R-CNN Cross-Validation Results
 
-The saved TACO-10 run used 4-fold cross validation. Within each fold, the
-fold's images were split into 70% training, 15% validation, and 15% test data.
-The overall summary is saved in
-[`cross_validation_summary.json`](artifacts/taco/maskrcnn_taco10/cross_validation_summary.json).
+Two saved TACO-10 experiments use 4-fold cross validation with different
+train/validation/test ratios. The 70/15/15 run is saved under
+[`artifacts/taco/maskrcnn_taco10_70`](artifacts/taco/maskrcnn_taco10_70), and
+the 80/10/10 run is saved under
+[`artifacts/taco/maskrcnn_taco10_80`](artifacts/taco/maskrcnn_taco10_80).
+
+The referenced TACO paper uses Mask R-CNN on TACO-10 with 4-fold cross
+validation, an 80% training, 10% validation, and 10% test split inside each
+fold, and mask Average Precision (AP) as the main metric. These repository
+results use Torchvision's standard COCO-style prediction scores, so the paper
+comparison is useful context rather than a strict reproduction.
+
+#### 70/15/15 Split
 
 | Fold | Epochs run | Mask AP | Mask AP50 | Mask AP75 | Bbox AP |
 |---|---:|---:|---:|---:|---:|
@@ -247,40 +256,68 @@ The overall summary is saved in
 | 4 | 10 | 15.27% | 21.00% | 16.97% | 13.86% |
 | **Average** |  | **21.57%** | **29.23%** | **23.95%** | **20.18%** |
 
+#### 80/10/10 Split
+
+| Fold | Epochs run | Mask AP | Mask AP50 | Mask AP75 | Bbox AP |
+|---|---:|---:|---:|---:|---:|
+| 1 | 13 | 15.49% | 20.85% | 18.30% | 13.44% |
+| 2 | 15 | 32.57% | 46.81% | 36.11% | 28.24% |
+| 3 | 9 | 27.27% | 36.00% | 33.31% | 25.11% |
+| 4 | 11 | 18.51% | 26.47% | 21.32% | 16.57% |
+| **Average** |  | **23.46%** | **32.53%** | **27.26%** | **20.84%** |
+
+#### Split Comparison
+
+| Split | Train/val/test images across fold partitions | Mask AP | Mask AP50 | Mask AP75 | Bbox AP | Mask AR100 |
+|---|---|---:|---:|---:|---:|---:|
+| 70/15/15 | 1,054 / 223 / 223 | 21.57 +/- 5.59 | 29.23 +/- 7.05 | 23.95 +/- 5.97 | 20.18 +/- 5.92 | 43.19% |
+| 80/10/10 | 1,196 / 152 / 152 | **23.46 +/- 7.86** | **32.53 +/- 11.39** | **27.26 +/- 8.77** | **20.84 +/- 6.98** | **46.14%** |
+
+The 80/10/10 split has the better saved results. It improves the main mask AP
+by 1.89 percentage points over the 70/15/15 split, with stronger AP50, AP75,
+bbox AP, and mask recall. The tradeoff is that the 80/10/10 run evaluates on
+fewer validation and test images per fold, and its fold-to-fold standard
+deviation is higher, so the improvement should be treated as a promising but
+not definitive margin.
+
 The TACO paper reports TACO-10 mask AP from a 4-fold Mask R-CNN evaluation with
-three prediction-ranking scores:
+three prediction-ranking scores. These values are listed only as reference
+context because the repository evaluation uses Torchvision/COCO-style scoring,
+so the numbers are not directly comparable:
 
 | Evaluation | TACO-10 AP |
 |---|---:|
 | Paper, class score | 17.6 +/- 1.6 |
 | Paper, litter score | 18.4 +/- 1.5 |
 | Paper, ratio score | 19.4 +/- 1.5 |
-| This repository, COCO class-score-style mask AP | **21.57** |
 
-Numerically, this saved run is above the paper's best reported TACO-10 result
-by about 2.2 AP points. Treat the comparison as indicative rather than a strict
-reproduction: the paper used 80%/10%/10% train/validation/test splits inside
-each fold and compared custom ranking scores, while this run uses 70%/15%/15%
-splits and the standard COCO prediction scores emitted by Torchvision.
+Because the paper and repository use different scoring methods, the repository
+results should be compared against each other rather than treated as a direct
+improvement over the paper. Under the repository's saved evaluation setup, the
+80/10/10 split is the strongest result.
 
 ## EcoDetect Model Comparison
 
-The EcoDetect runs compare three image-level MobileNet classifiers with one
-YOLOv11 object detector on the same 75-image test split. The MobileNet scripts
-convert each YOLO image into one class label using the largest bounding box,
-while YOLOv11 keeps the original bounding boxes and is evaluated with detection
-metrics.
+The EcoDetect runs include image-level MobileNet classifiers and a YOLOv11
+object detector. The MobileNet scripts convert each YOLO image into one class
+label using the largest bounding box, so they are compared with classification
+metrics. YOLOv11 keeps the original bounding boxes and is shown separately with
+detection metrics.
 
-| Model | Task | Test images | Primary result | Weighted F1 / mAP50-95 | Notes |
-|---|---|---:|---:|---:|---|
-| MobileNetV2 | Image classification | 75 | 69.33% accuracy | 0.6913 weighted F1 | Best saved image classifier. |
-| MobileNetV3Small | Image classification | 75 | 40.00% accuracy | 0.4203 weighted F1 | Weakest MobileNet run. |
-| MobileNetV4 Conv Small | Image classification | 75 | 48.00% accuracy | 0.5023 weighted F1 | Baseline V4 run; better than V3 but behind V2. |
-| MobileNetV4 Conv Small, Colab middle run | Image classification | 75 | 53.33% accuracy | 0.5234 weighted F1 | Best saved V4 accuracy, still below V2. |
-| MobileNetV4 Conv Small, Colab more-epochs run | Image classification | 75 | 53.33% accuracy | 0.5179 weighted F1 | Similar accuracy to the middle run, lower weighted F1. |
-| YOLOv11 | Object detection | 75 | 46.74% mAP50 | 33.47% mAP50-95 | Higher recall than precision; use when localization is required. |
+### MobileNet Classifier Comparison
 
-YOLOv11 detection summary:
+| Model | Test images | Accuracy | Weighted F1 | Notes |
+|---|---:|---:|---:|---|
+| MobileNetV2 | 75 | 69.33% | 0.6913 | Best saved image classifier. |
+| MobileNetV3Small | 75 | 40.00% | 0.4203 | Weakest MobileNet run. |
+| MobileNetV4 Conv Small | 75 | 48.00% | 0.5023 | Baseline V4 run; better than V3 but behind V2. |
+| MobileNetV4 Conv Small, Colab middle run | 75 | 53.33% | 0.5234 | Best saved V4 accuracy, still below V2. |
+| MobileNetV4 Conv Small, Colab more-epochs run | 75 | 53.33% | 0.5179 | Similar accuracy to the middle run, lower weighted F1. |
+
+### YOLOv11 Detector Results
+
+YOLOv11 solves a different task from the MobileNet classifiers: it must predict
+both the class and the bounding-box location for each object.
 
 | Metric | Value |
 |---|---:|

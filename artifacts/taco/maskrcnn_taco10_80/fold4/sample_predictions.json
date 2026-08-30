@@ -1,0 +1,24 @@
+[
+  {
+    "image_id": 88,
+    "detections": [
+      {
+        "label": "Can",
+        "score": 0.578903317451477
+      },
+      {
+        "label": "Other Litter",
+        "score": 0.5490168333053589
+      }
+    ]
+  },
+  {
+    "image_id": 97,
+    "detections": [
+      {
+        "label": "Other Litter",
+        "score": 0.5175507664680481
+      }
+    ]
+  }
+]

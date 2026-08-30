@@ -17,6 +17,11 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import InterpolationMode
 from torchvision.transforms import functional as F
 
+from torchvision.models.detection import MaskRCNN_ResNet50_FPN_Weights
+from torchvision.models.detection import maskrcnn_resnet50_fpn
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
+
 
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.yaml")
 TACO10_OTHER = "Other Litter"
@@ -940,10 +945,6 @@ def make_loader(
 
 
 def build_model(num_classes: int, pretrained: bool, weights_name: str | None) -> torch.nn.Module:
-    from torchvision.models.detection import MaskRCNN_ResNet50_FPN_Weights
-    from torchvision.models.detection import maskrcnn_resnet50_fpn
-    from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-    from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 
     weights = None
     if pretrained:
@@ -1485,7 +1486,7 @@ def run_training_split(
             torch.save(model.state_dict(), output_dir / "best_model.pth")
         else:
             patience_counter += 1
-            if args.patience > 0 and patience_counter >= args.patience:
+            if 0 < args.patience <= patience_counter:
                 print(f"{split_name} early stopping after {epoch} epochs.")
                 break
 

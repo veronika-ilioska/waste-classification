@@ -1,0 +1,20 @@
+[
+  {
+    "image_id": 4,
+    "detections": [
+      {
+        "label": "Other Litter",
+        "score": 0.5142906904220581
+      }
+    ]
+  },
+  {
+    "image_id": 30,
+    "detections": [
+      {
+        "label": "Other Litter",
+        "score": 0.5774572491645813
+      }
+    ]
+  }
+]
