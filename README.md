@@ -209,6 +209,18 @@ Train Mask R-CNN:
 .\.venv\Scripts\python.exe TACO\train_taco_maskrcnn.py
 ```
 
+Evaluate saved cross-validation checkpoints with the TACO paper's prediction
+ranking scores without retraining:
+
+```powershell
+.\.venv\Scripts\python.exe TACO\train_taco_maskrcnn.py `
+  --cross-validation `
+  --paper-score-eval-only `
+  --val-fraction 0.1 `
+  --test-fraction 0.1 `
+  --output-dir artifacts\taco\maskrcnn_taco10_80
+```
+
 The default `training.device: auto` uses CUDA automatically when a GPU is
 available and falls back to CPU otherwise. In Colab, enable a GPU under
 `Runtime > Change runtime type`, then run the script normally or force CUDA with

@@ -11,9 +11,11 @@ from typing import Any
 
 import numpy as np
 import torch
+import torch.nn.functional as torch_F
 import yaml
 from PIL import Image, ImageDraw, ImageOps
 from torch.utils.data import DataLoader, Dataset
+from torchvision.ops import boxes as box_ops
 from torchvision.transforms import InterpolationMode
 from torchvision.transforms import functional as F
 
@@ -21,6 +23,7 @@ from torchvision.models.detection import MaskRCNN_ResNet50_FPN_Weights
 from torchvision.models.detection import maskrcnn_resnet50_fpn
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
+from torchvision.models.detection.roi_heads import maskrcnn_inference
 
 
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.yaml")
@@ -278,6 +281,19 @@ def parse_args(config: Config, config_path: Path) -> argparse.Namespace:
         type=float,
         default=config.evaluation_score_threshold,
         help="Minimum prediction score included in COCO AP evaluation.",
+    )
+    parser.add_argument(
+        "--paper-score-eval-only",
+        action="store_true",
+        help=(
+            "Load saved fold checkpoints and evaluate TACO-paper-style "
+            "class, litter, and ratio prediction scores without retraining."
+        ),
+    )
+    parser.add_argument(
+        "--checkpoint-name",
+        default="best_model.pth",
+        help="Checkpoint filename to load inside each fold directory for --paper-score-eval-only.",
     )
     parser.add_argument("--no-pretrained", action="store_true")
     parser.add_argument("--check-only", action="store_true")
@@ -1178,6 +1194,216 @@ def prediction_to_coco_results(
     return results
 
 
+def prediction_to_coco_results_with_scores(
+    prediction: dict[str, torch.Tensor],
+    scores: torch.Tensor,
+    image_id: int,
+    score_threshold: float,
+) -> list[dict[str, Any]]:
+    try:
+        from pycocotools import mask as mask_utils
+    except ImportError as error:
+        raise ImportError(
+            "pycocotools is required for COCO mask AP. Install requirements.txt "
+            "again, or in Colab run: !pip install pycocotools"
+        ) from error
+
+    boxes = prediction["boxes"].detach().cpu()
+    labels = prediction["labels"].detach().cpu()
+    masks = prediction["masks"].detach().cpu()
+    scores = scores.detach().cpu()
+    results = []
+    for box, label, score, mask in zip(boxes, labels, scores, masks):
+        score_value = float(score.item())
+        if score_value < score_threshold:
+            continue
+        mask_array = (mask[0].numpy() >= 0.5).astype(np.uint8)
+        if int(mask_array.sum()) == 0:
+            continue
+        rle = mask_utils.encode(np.asfortranarray(mask_array))
+        rle["counts"] = rle["counts"].decode("utf-8")
+        x_min, y_min, x_max, y_max = [float(value) for value in box.tolist()]
+        results.append(
+            {
+                "image_id": image_id,
+                "category_id": int(label.item()),
+                "bbox": [x_min, y_min, max(0.0, x_max - x_min), max(0.0, y_max - y_min)],
+                "segmentation": rle,
+                "score": score_value,
+            }
+        )
+    return results
+
+
+def postprocess_paper_score_detections(
+    model: torch.nn.Module,
+    class_logits: torch.Tensor,
+    box_regression: torch.Tensor,
+    proposals: list[torch.Tensor],
+    image_shapes: list[tuple[int, int]],
+    score_threshold: float,
+) -> dict[str, list[dict[str, torch.Tensor]]]:
+    roi_heads = model.roi_heads
+    device = class_logits.device
+    num_classes = class_logits.shape[-1]
+    boxes_per_image = [boxes_in_image.shape[0] for boxes_in_image in proposals]
+    pred_boxes = roi_heads.box_coder.decode(box_regression, proposals)
+    pred_scores = torch_F.softmax(class_logits, -1)
+
+    pred_boxes_list = pred_boxes.split(boxes_per_image, 0)
+    pred_scores_list = pred_scores.split(boxes_per_image, 0)
+    outputs: dict[str, list[dict[str, torch.Tensor]]] = {
+        "class_score": [],
+        "litter_score": [],
+        "ratio_score": [],
+    }
+
+    for boxes, scores, image_shape in zip(pred_boxes_list, pred_scores_list, image_shapes):
+        if boxes.numel() == 0:
+            empty_prediction = {
+                "boxes": torch.empty((0, 4), device=device),
+                "labels": torch.empty((0,), dtype=torch.int64, device=device),
+                "scores": torch.empty((0,), device=device),
+                "class_score": torch.empty((0,), device=device),
+                "litter_score": torch.empty((0,), device=device),
+                "ratio_score": torch.empty((0,), device=device),
+            }
+            for score_name in outputs:
+                outputs[score_name].append(empty_prediction.copy())
+            continue
+
+        class_ids = scores.argmax(dim=1)
+        row_indices = torch.arange(scores.shape[0], device=device)
+        class_scores = scores[row_indices, class_ids]
+        background_scores = scores[:, 0]
+        litter_scores = 1.0 - background_scores
+        ratio_scores = class_scores / (background_scores + 0.0001)
+
+        boxes = box_ops.clip_boxes_to_image(boxes, image_shape)
+        selected_boxes = boxes[row_indices, class_ids]
+
+        keep = torch.where(class_ids > 0)[0]
+        keep = keep[torch.where(class_scores[keep] >= score_threshold)[0]]
+        keep = keep[box_ops.remove_small_boxes(selected_boxes[keep], min_size=1e-2)]
+
+        if keep.numel() > 0:
+            nms_keep = box_ops.batched_nms(
+                selected_boxes[keep],
+                class_scores[keep],
+                class_ids[keep],
+                roi_heads.nms_thresh,
+            )
+            keep = keep[nms_keep]
+
+        score_values = {
+            "class_score": class_scores,
+            "litter_score": litter_scores,
+            "ratio_score": ratio_scores,
+        }
+        for score_name, variant_scores in score_values.items():
+            variant_keep = keep
+            if variant_keep.numel() > 0:
+                _, order = variant_scores[variant_keep].sort(descending=True)
+                variant_keep = variant_keep[order[: roi_heads.detections_per_img]]
+            outputs[score_name].append(
+                {
+                    "boxes": selected_boxes[variant_keep],
+                    "labels": class_ids[variant_keep],
+                    "scores": variant_scores[variant_keep],
+                    "class_score": class_scores[variant_keep],
+                    "litter_score": litter_scores[variant_keep],
+                    "ratio_score": ratio_scores[variant_keep],
+                }
+            )
+
+    return outputs
+
+
+@torch.no_grad()
+def predict_paper_score_variants(
+    model: torch.nn.Module,
+    images: list[torch.Tensor],
+    device: torch.device,
+    score_threshold: float,
+) -> dict[str, list[dict[str, torch.Tensor]]]:
+    model.eval()
+    original_image_sizes = [tuple(image.shape[-2:]) for image in images]
+    images = [image.to(device) for image in images]
+    transformed_images, _ = model.transform(images, None)
+    features = model.backbone(transformed_images.tensors)
+    if isinstance(features, torch.Tensor):
+        features = {"0": features}
+    proposals, _ = model.rpn(transformed_images, features, None)
+
+    box_features = model.roi_heads.box_roi_pool(
+        features,
+        proposals,
+        transformed_images.image_sizes,
+    )
+    box_features = model.roi_heads.box_head(box_features)
+    class_logits, box_regression = model.roi_heads.box_predictor(box_features)
+    variants = postprocess_paper_score_detections(
+        model,
+        class_logits,
+        box_regression,
+        proposals,
+        transformed_images.image_sizes,
+        score_threshold,
+    )
+
+    for detections in variants.values():
+        mask_proposals = [prediction["boxes"] for prediction in detections]
+        mask_features = model.roi_heads.mask_roi_pool(
+            features,
+            mask_proposals,
+            transformed_images.image_sizes,
+        )
+        mask_features = model.roi_heads.mask_head(mask_features)
+        mask_logits = model.roi_heads.mask_predictor(mask_features)
+        labels = [prediction["labels"] for prediction in detections]
+        masks_probs = maskrcnn_inference(mask_logits, labels)
+        for mask_prob, prediction in zip(masks_probs, detections):
+            prediction["masks"] = mask_prob
+
+    return {
+        score_name: model.transform.postprocess(
+            detections,
+            transformed_images.image_sizes,
+            original_image_sizes,
+        )
+        for score_name, detections in variants.items()
+    }
+
+
+@torch.no_grad()
+def collect_paper_score_predictions(
+    model: torch.nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+    score_threshold: float,
+) -> dict[str, list[dict[str, Any]]]:
+    results = {
+        "class_score": [],
+        "litter_score": [],
+        "ratio_score": [],
+    }
+    for images, targets in loader:
+        variants = predict_paper_score_variants(model, images, device, score_threshold)
+        for target_index, target in enumerate(targets):
+            image_id = int(target["image_id"].item())
+            for score_name, predictions in variants.items():
+                prediction = predictions[target_index]
+                results[score_name].extend(
+                    prediction_to_coco_results_with_scores(
+                        prediction,
+                        prediction[score_name],
+                        image_id,
+                        score_threshold,
+                    )
+                )
+    return results
+
+
 @torch.no_grad()
 def collect_coco_predictions(
     model: torch.nn.Module,
@@ -1274,6 +1500,48 @@ def evaluate_coco_metrics(
     return metrics
 
 
+def evaluate_paper_score_metrics(
+    model: torch.nn.Module,
+    test_loader: DataLoader,
+    test_records: list[dict[str, Any]],
+    annotations_by_image: dict[int, list[dict[str, Any]]],
+    raw_id_to_label: dict[int, int],
+    class_names: list[str],
+    output_dir: Path,
+    device: torch.device,
+    score_threshold: float,
+) -> dict[str, dict[str, dict[str, float]]]:
+    ground_truth = coco_ground_truth(
+        test_records,
+        annotations_by_image,
+        raw_id_to_label,
+        class_names,
+    )
+    ground_truth_path = output_dir / "paper_score_ground_truth.json"
+    ground_truth_path.write_text(json.dumps(ground_truth), encoding="utf-8")
+
+    predictions_by_score = collect_paper_score_predictions(
+        model,
+        test_loader,
+        device,
+        score_threshold,
+    )
+    metrics: dict[str, dict[str, dict[str, float]]] = {}
+    for score_name, predictions in predictions_by_score.items():
+        predictions_path = output_dir / f"paper_score_{score_name}_predictions.json"
+        predictions_path.write_text(json.dumps(predictions), encoding="utf-8")
+        metrics[score_name] = {
+            "segm": run_coco_eval(ground_truth_path, predictions_path, "segm"),
+            "bbox": run_coco_eval(ground_truth_path, predictions_path, "bbox"),
+        }
+
+    (output_dir / "paper_score_metrics.json").write_text(
+        json.dumps(metrics, indent=2),
+        encoding="utf-8",
+    )
+    return metrics
+
+
 def save_split_summary(
     output_dir: Path,
     train_records: list[dict[str, Any]],
@@ -1354,6 +1622,94 @@ def average_coco_metrics(fold_summaries: list[dict[str, Any]]) -> dict[str, dict
             for key in keys
         }
     return averaged
+
+
+def average_paper_score_metrics(
+    fold_summaries: list[dict[str, Any]],
+) -> dict[str, dict[str, dict[str, float]]]:
+    averaged: dict[str, dict[str, dict[str, float]]] = {}
+    score_names = sorted(
+        {
+            score_name
+            for summary in fold_summaries
+            for score_name in summary["paper_score_metrics"]
+        }
+    )
+    for score_name in score_names:
+        averaged[score_name] = {}
+        for metric_type in ("segm", "bbox"):
+            keys = sorted(
+                {
+                    key
+                    for summary in fold_summaries
+                    for key in summary["paper_score_metrics"][score_name][metric_type]
+                }
+            )
+            averaged[score_name][metric_type] = {
+                key: float(
+                    sum(
+                        summary["paper_score_metrics"][score_name][metric_type][key]
+                        for summary in fold_summaries
+                    )
+                    / len(fold_summaries)
+                )
+                for key in keys
+            }
+    return averaged
+
+
+def run_paper_score_evaluation_split(
+    args: argparse.Namespace,
+    config: Config,
+    dataset_dir: Path,
+    annotations_by_image: dict[int, list[dict[str, Any]]],
+    raw_id_to_label: dict[int, int],
+    class_names: list[str],
+    test_records: list[dict[str, Any]],
+    output_dir: Path,
+    device: torch.device,
+    split_name: str,
+) -> dict[str, Any]:
+    checkpoint_path = output_dir / args.checkpoint_name
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(f"Could not find checkpoint for {split_name}: {checkpoint_path}")
+
+    test_dataset = make_taco_dataset(
+        test_records,
+        annotations_by_image,
+        raw_id_to_label,
+        dataset_dir,
+        config,
+        train=False,
+    )
+    test_loader = make_loader(test_dataset, args.batch_size, shuffle=False, workers=args.workers)
+    model = build_model(
+        num_classes=len(class_names),
+        pretrained=False,
+        weights_name=None,
+    ).to(device)
+    model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+
+    print(f"{split_name} paper-score evaluation using {checkpoint_path}")
+    paper_score_metrics = evaluate_paper_score_metrics(
+        model,
+        test_loader,
+        test_records,
+        annotations_by_image,
+        raw_id_to_label,
+        class_names,
+        output_dir,
+        device,
+        score_threshold=0.0,
+    )
+    for score_name, metrics in paper_score_metrics.items():
+        print(f"{split_name} {score_name} mask AP: {metrics['segm']['AP']:.4f}")
+
+    return {
+        "output_dir": str(output_dir),
+        "checkpoint": str(checkpoint_path),
+        "paper_score_metrics": paper_score_metrics,
+    }
 
 
 def run_training_split(
@@ -1593,20 +1949,34 @@ def run_cross_validation(
             f"{len(fold_records)} total, "
             f"{len(train_records)} train, {len(val_records)} val, {len(test_records)} test images"
         )
-        summary = run_training_split(
-            args,
-            config,
-            dataset_dir,
-            annotations_by_image,
-            raw_id_to_label,
-            class_names,
-            train_records,
-            val_records,
-            test_records,
-            fold_output_dir,
-            device,
-            split_name=f"fold {fold_index + 1}",
-        )
+        if args.paper_score_eval_only:
+            summary = run_paper_score_evaluation_split(
+                args,
+                config,
+                dataset_dir,
+                annotations_by_image,
+                raw_id_to_label,
+                class_names,
+                test_records,
+                fold_output_dir,
+                device,
+                split_name=f"fold {fold_index + 1}",
+            )
+        else:
+            summary = run_training_split(
+                args,
+                config,
+                dataset_dir,
+                annotations_by_image,
+                raw_id_to_label,
+                class_names,
+                train_records,
+                val_records,
+                test_records,
+                fold_output_dir,
+                device,
+                split_name=f"fold {fold_index + 1}",
+            )
         summary.update(
             {
                 "fold": fold_index + 1,
@@ -1614,6 +1984,26 @@ def run_cross_validation(
             }
         )
         fold_summaries.append(summary)
+
+    if args.paper_score_eval_only:
+        completed = [summary for summary in fold_summaries if "paper_score_metrics" in summary]
+        average_metrics = average_paper_score_metrics(completed) if completed else {}
+        cv_summary = {
+            "folds": args.folds,
+            "val_fraction": args.val_fraction,
+            "test_fraction": args.test_fraction,
+            "classes": class_names,
+            "fold_summaries": fold_summaries,
+            "average_paper_score_metrics": average_metrics,
+        }
+        (args.output_dir / "paper_score_summary.json").write_text(
+            json.dumps(cv_summary, indent=2),
+            encoding="utf-8",
+        )
+        for score_name, metrics in average_metrics.items():
+            print(f"Average {score_name} mask AP: {metrics['segm']['AP']:.4f}")
+        print(f"Paper-score summary saved to {args.output_dir / 'paper_score_summary.json'}")
+        return
 
     completed = [summary for summary in fold_summaries if "coco_metrics" in summary]
     average_metrics = average_coco_metrics(completed) if completed else {}
