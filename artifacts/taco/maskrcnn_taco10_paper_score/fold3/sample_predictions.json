@@ -1,0 +1,15 @@
+[
+  {
+    "image_id": 19,
+    "detections": []
+  },
+  {
+    "image_id": 56,
+    "detections": [
+      {
+        "label": "Bottle cap",
+        "score": 0.5320854783058167
+      }
+    ]
+  }
+]

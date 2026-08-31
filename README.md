@@ -218,7 +218,7 @@ ranking scores without retraining:
   --paper-score-eval-only `
   --val-fraction 0.1 `
   --test-fraction 0.1 `
-  --output-dir artifacts\taco\maskrcnn_taco10_80
+  --output-dir artifacts\taco\maskrcnn_taco10_paper_score
 ```
 
 The default `training.device: auto` uses CUDA automatically when a GPU is
@@ -254,9 +254,10 @@ the 80/10/10 run is saved under
 
 The referenced TACO paper uses Mask R-CNN on TACO-10 with 4-fold cross
 validation, an 80% training, 10% validation, and 10% test split inside each
-fold, and mask Average Precision (AP) as the main metric. These repository
-results use Torchvision's standard COCO-style prediction scores, so the paper
-comparison is useful context rather than a strict reproduction.
+fold, and mask Average Precision (AP) as the main metric. The regular
+repository runs below use Torchvision's standard COCO-style prediction scores,
+so they should be compared against each other rather than treated as direct
+paper reproductions. A separate paper-style evaluation is included afterward.
 
 #### 70/15/15 Split
 
@@ -292,21 +293,30 @@ fewer validation and test images per fold, and its fold-to-fold standard
 deviation is higher, so the improvement should be treated as a promising but
 not definitive margin.
 
-The TACO paper reports TACO-10 mask AP from a 4-fold Mask R-CNN evaluation with
-three prediction-ranking scores. These values are listed only as reference
-context because the repository evaluation uses Torchvision/COCO-style scoring,
-so the numbers are not directly comparable:
+#### Paper-Style Score Evaluation
 
-| Evaluation | TACO-10 AP |
+The saved 80/10/10 checkpoints were also re-evaluated with the paper's three
+prediction-ranking scores. Those artifacts are saved under
+[`artifacts/taco/maskrcnn_taco10_paper_score`](artifacts/taco/maskrcnn_taco10_paper_score),
+with the aggregate values in
+[`paper_score_summary.json`](artifacts/taco/maskrcnn_taco10_paper_score/paper_score_summary.json).
+
+| Evaluation | Mask AP |
 |---|---:|
 | Paper, class score | 17.6 +/- 1.6 |
+| This repository, class score | 15.70 +/- 4.13 |
 | Paper, litter score | 18.4 +/- 1.5 |
-| Paper, ratio score | 19.4 +/- 1.5 |
+| This repository, litter score | 16.00 +/- 3.69 |
+| Paper, ratio score | **19.4 +/- 1.5** |
+| This repository, ratio score | 16.89 +/- 4.40 |
 
-Because the paper and repository use different scoring methods, the repository
-results should be compared against each other rather than treated as a direct
-improvement over the paper. Under the repository's saved evaluation setup, the
-80/10/10 split is the strongest result.
+With the paper-style scoring, the repository's best result is the ratio score
+at 16.89 AP. That is lower than the paper's reported ratio-score result of
+19.4 AP, so the paper-style comparison does not show an improvement over the
+paper. The strongest conclusion from these artifacts is that 80/10/10 is the
+better split under the repository's standard COCO-style evaluation, while ratio
+score is the best of the three paper-style ranking methods for the saved
+80/10/10 checkpoints.
 
 ## EcoDetect Model Comparison
 

@@ -70,6 +70,15 @@ artifacts/taco/maskrcnn_taco10_80/fold*/*
 !artifacts/taco/maskrcnn_taco10_80/fold*/sample_predictions.json
 !artifacts/taco/maskrcnn_taco10_80/fold*/split_summary.json
 !artifacts/taco/maskrcnn_taco10_80/fold*/test_metrics.json
+!artifacts/taco/maskrcnn_taco10_paper_score/
+artifacts/taco/maskrcnn_taco10_paper_score/*
+!artifacts/taco/maskrcnn_taco10_paper_score/labels.json
+!artifacts/taco/maskrcnn_taco10_paper_score/split_summary.json
+!artifacts/taco/maskrcnn_taco10_paper_score/cross_validation_summary.json
+!artifacts/taco/maskrcnn_taco10_paper_score/paper_score_summary.json
+!artifacts/taco/maskrcnn_taco10_paper_score/fold*/
+artifacts/taco/maskrcnn_taco10_paper_score/fold*/*
+!artifacts/taco/maskrcnn_taco10_paper_score/fold*/*.json
 
 checkpoints/
 logs/
