@@ -40,7 +40,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path(os.getenv("EVALUATION_DIR", "artifacts/evaluation")),
+        default=Path(os.getenv("EVALUATION_DIR", "artifacts/mobilenetv2_classifier_evaluation")),
     )
     parser.add_argument("--batch-size", type=int, default=config.batch_size)
     parser.add_argument(

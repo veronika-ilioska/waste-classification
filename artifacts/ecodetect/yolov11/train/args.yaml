@@ -109,4 +109,4 @@ auto_augment: randaugment
 erasing: 0.4
 cfg: null
 tracker: tracktrack.yaml
-save_dir: /content/waste-classification/runs/detect/artifacts/ecodetect/yolov11/train
+save_dir: artifacts/ecodetect/yolov11/train

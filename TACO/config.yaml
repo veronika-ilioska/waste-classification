@@ -9,7 +9,7 @@ dataset:
   category_field: supercategory
 
 output:
-  dir: artifacts/taco/maskrcnn_taco10_70
+  dir: artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics
 
 model:
   pretrained: true

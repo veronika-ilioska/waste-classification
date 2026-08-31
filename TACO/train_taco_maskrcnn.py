@@ -206,7 +206,7 @@ def load_config(config_path: Path) -> Config:
         image_extensions=extensions(dataset.get("image_extensions", [".jpg", ".jpeg", ".png"])),
         taxonomy=str(dataset.get("taxonomy", "taco10")),
         category_field=str(dataset.get("category_field", "supercategory")),
-        output_dir=Path(str(output.get("dir", "artifacts/taco/maskrcnn"))),
+        output_dir=Path(str(output.get("dir", "artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics"))),
         pretrained=bool(model.get("pretrained", True)),
         weights=optional_text(model.get("weights", "DEFAULT")),
         batch_size=int(training.get("batch_size", 2)),

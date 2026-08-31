@@ -41,7 +41,7 @@ The following gallery shows the 25 most confident incorrect predictions. Each
 image includes its true class, predicted class, and the model's confidence in
 the incorrect prediction.
 
-![Most confident misclassified examples](artifacts/evaluation/misclassified_examples.png)
+![Most confident misclassified examples](artifacts/mobilenetv2_classifier_evaluation/misclassified_examples.png)
 
 ## Setup
 
@@ -79,7 +79,7 @@ Training produces the following files under `artifacts/`:
 .\.venv\Scripts\python.exe MobileNetV2\evaluate_mobilenetv2.py
 ```
 
-Evaluation outputs are written to `artifacts/evaluation/`:
+Evaluation outputs are written to `artifacts/mobilenetv2_classifier_evaluation/`:
 
 - Classification report in text and JSON formats
 - Raw and normalized confusion-matrix images
@@ -218,7 +218,7 @@ ranking scores without retraining:
   --paper-score-eval-only `
   --val-fraction 0.1 `
   --test-fraction 0.1 `
-  --output-dir artifacts\taco\maskrcnn_taco10_paper_score
+  --output-dir artifacts\taco\maskrcnn_taco10_cv_80_10_10_paper_metrics
 ```
 
 The default `training.device: auto` uses CUDA automatically when a GPU is
@@ -230,7 +230,8 @@ By default the script uses the paper-style TACO-10 taxonomy: `Bottle`,
 `Bottle cap`, `Can`, `Cigarette`, `Cup`, `Lid`, `Other Litter`,
 `Plastic bag + wrapper`, `Pop tab`, and `Straw`. Change `dataset.taxonomy` to
 `category-field` if you want to group categories by `dataset.category_field`
-instead. Outputs are saved under `artifacts/taco/maskrcnn_taco10`.
+instead. Outputs are saved under the configured `output.dir`, which defaults to
+`artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics`.
 
 Training augmentations are configured in `TACO/config.yaml`. The default setup
 uses horizontal flips, small rotations, object-centered random crops, brightness
@@ -248,9 +249,9 @@ both masks and boxes. The main segmentation values are written to
 
 Two saved TACO-10 experiments use 4-fold cross validation with different
 train/validation/test ratios. The 70/15/15 run is saved under
-[`artifacts/taco/maskrcnn_taco10_70`](artifacts/taco/maskrcnn_taco10_70), and
+[`artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics`](artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics), and
 the 80/10/10 run is saved under
-[`artifacts/taco/maskrcnn_taco10_80`](artifacts/taco/maskrcnn_taco10_80).
+[`artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics`](artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics).
 
 The referenced TACO paper uses Mask R-CNN on TACO-10 with 4-fold cross
 validation, an 80% training, 10% validation, and 10% test split inside each
@@ -297,9 +298,9 @@ not definitive margin.
 
 The saved 80/10/10 checkpoints were also re-evaluated with the paper's three
 prediction-ranking scores. Those artifacts are saved under
-[`artifacts/taco/maskrcnn_taco10_paper_score`](artifacts/taco/maskrcnn_taco10_paper_score),
+[`artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics`](artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics),
 with the aggregate values in
-[`paper_score_summary.json`](artifacts/taco/maskrcnn_taco10_paper_score/paper_score_summary.json).
+[`paper_score_summary.json`](artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/paper_score_summary.json).
 
 | Evaluation | Mask AP |
 |---|---:|
@@ -333,8 +334,8 @@ detection metrics.
 | MobileNetV2 | 75 | 69.33% | 0.6913 | Best saved image classifier. |
 | MobileNetV3Small | 75 | 40.00% | 0.4203 | Weakest MobileNet run. |
 | MobileNetV4 Conv Small | 75 | 48.00% | 0.5023 | Baseline V4 run; better than V3 but behind V2. |
-| MobileNetV4 Conv Small, Colab middle run | 75 | 53.33% | 0.5234 | Best saved V4 accuracy, still below V2. |
-| MobileNetV4 Conv Small, Colab more-epochs run | 75 | 53.33% | 0.5179 | Similar accuracy to the middle run, lower weighted F1. |
+| MobileNetV4 Conv Small, Colab best-F1 run | 75 | 53.33% | 0.5234 | Best saved V4 weighted F1, still below V2. |
+| MobileNetV4 Conv Small, Colab extended-epochs run | 75 | 53.33% | 0.5179 | Similar accuracy to the best-F1 run, lower weighted F1. |
 
 ### YOLOv11 Detector Results
 
@@ -374,8 +375,8 @@ possible objects than being selective and confident.
 | MobileNetV2 | 0.471 | 0.702 | 0.737 | 69.33% |
 | MobileNetV3Small | 0.278 | 0.415 | 0.459 | 40.00% |
 | MobileNetV4 Conv Small | 0.294 | 0.489 | 0.563 | 48.00% |
-| MobileNetV4 Colab middle | 0.296 | 0.390 | 0.683 | 53.33% |
-| MobileNetV4 Colab more epochs | 0.250 | 0.381 | 0.690 | 53.33% |
+| MobileNetV4 Colab best F1 | 0.296 | 0.390 | 0.683 | 53.33% |
+| MobileNetV4 Colab extended epochs | 0.250 | 0.381 | 0.690 | 53.33% |
 
 MobileNetV2 is the best overall image classifier in the saved results. It has
 the strongest balance across `paper` and `plastic`, but it still struggles with
@@ -415,9 +416,9 @@ and the focal-loss experiment is under
 | MobileNetV2 | [`training_curves.png`](artifacts/ecodetect/mobilenetv2/training_curves.png) | [`confusion_matrix.png`](artifacts/ecodetect/mobilenetv2/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/mobilenetv2/confusion_matrix_normalized.png) | [`test_metrics.json`](artifacts/ecodetect/mobilenetv2/test_metrics.json), [`classification_report.txt`](artifacts/ecodetect/mobilenetv2/classification_report.txt), [`predictions.csv`](artifacts/ecodetect/mobilenetv2/predictions.csv) |
 | MobileNetV3Small | [`training_curves.png`](artifacts/ecodetect/mobilenetv3/training_curves.png) | [`confusion_matrix.png`](artifacts/ecodetect/mobilenetv3/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/mobilenetv3/confusion_matrix_normalized.png) | [`test_metrics.json`](artifacts/ecodetect/mobilenetv3/test_metrics.json), [`classification_report.txt`](artifacts/ecodetect/mobilenetv3/classification_report.txt), [`predictions.csv`](artifacts/ecodetect/mobilenetv3/predictions.csv) |
 | MobileNetV4 Conv Small | [`training_curves.png`](artifacts/ecodetect/mobilenetv4/training_curves.png) | [`confusion_matrix.png`](artifacts/ecodetect/mobilenetv4/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/mobilenetv4/confusion_matrix_normalized.png) | [`test_metrics.json`](artifacts/ecodetect/mobilenetv4/test_metrics.json), [`classification_report.txt`](artifacts/ecodetect/mobilenetv4/classification_report.txt), [`predictions.csv`](artifacts/ecodetect/mobilenetv4/predictions.csv) |
-| MobileNetV4 Colab middle | [`training_curves.png`](artifacts/ecodetect/mobilenetv4_colab_middle/training_curves.png) | [`confusion_matrix.png`](artifacts/ecodetect/mobilenetv4_colab_middle/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/mobilenetv4_colab_middle/confusion_matrix_normalized.png) | [`test_metrics.json`](artifacts/ecodetect/mobilenetv4_colab_middle/test_metrics.json), [`classification_report.txt`](artifacts/ecodetect/mobilenetv4_colab_middle/classification_report.txt), [`predictions.csv`](artifacts/ecodetect/mobilenetv4_colab_middle/predictions.csv) |
-| MobileNetV4 Colab more epochs | [`training_curves.png`](artifacts/ecodetect/mobilenetv4_colab_more_epochs/training_curves.png) | [`confusion_matrix.png`](artifacts/ecodetect/mobilenetv4_colab_more_epochs/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/mobilenetv4_colab_more_epochs/confusion_matrix_normalized.png) | [`test_metrics.json`](artifacts/ecodetect/mobilenetv4_colab_more_epochs/test_metrics.json), [`classification_report.txt`](artifacts/ecodetect/mobilenetv4_colab_more_epochs/classification_report.txt), [`predictions.csv`](artifacts/ecodetect/mobilenetv4_colab_more_epochs/predictions.csv) |
-| YOLOv11 | [`results.png`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train/results.png), [`results.csv`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train/results.csv) | [`confusion_matrix.png`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/confusion_matrix_normalized.png) | [`evaluation_summary.json`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train/evaluation_summary.json), [`BoxPR_curve.png`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/BoxPR_curve.png), [`BoxF1_curve.png`](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/BoxF1_curve.png) |
+| MobileNetV4 Colab best F1 | [`training_curves.png`](artifacts/ecodetect/mobilenetv4_colab_best_f1/training_curves.png) | [`confusion_matrix.png`](artifacts/ecodetect/mobilenetv4_colab_best_f1/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/mobilenetv4_colab_best_f1/confusion_matrix_normalized.png) | [`test_metrics.json`](artifacts/ecodetect/mobilenetv4_colab_best_f1/test_metrics.json), [`classification_report.txt`](artifacts/ecodetect/mobilenetv4_colab_best_f1/classification_report.txt), [`predictions.csv`](artifacts/ecodetect/mobilenetv4_colab_best_f1/predictions.csv) |
+| MobileNetV4 Colab extended epochs | [`training_curves.png`](artifacts/ecodetect/mobilenetv4_colab_extended_epochs/training_curves.png) | [`confusion_matrix.png`](artifacts/ecodetect/mobilenetv4_colab_extended_epochs/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/mobilenetv4_colab_extended_epochs/confusion_matrix_normalized.png) | [`test_metrics.json`](artifacts/ecodetect/mobilenetv4_colab_extended_epochs/test_metrics.json), [`classification_report.txt`](artifacts/ecodetect/mobilenetv4_colab_extended_epochs/classification_report.txt), [`predictions.csv`](artifacts/ecodetect/mobilenetv4_colab_extended_epochs/predictions.csv) |
+| YOLOv11 | [`results.png`](artifacts/ecodetect/yolov11/train/results.png), [`results.csv`](artifacts/ecodetect/yolov11/train/results.csv) | [`confusion_matrix.png`](artifacts/ecodetect/yolov11/train_test/confusion_matrix.png), [`confusion_matrix_normalized.png`](artifacts/ecodetect/yolov11/train_test/confusion_matrix_normalized.png) | [`evaluation_summary.json`](artifacts/ecodetect/yolov11/train/evaluation_summary.json), [`BoxPR_curve.png`](artifacts/ecodetect/yolov11/train_test/BoxPR_curve.png), [`BoxF1_curve.png`](artifacts/ecodetect/yolov11/train_test/BoxF1_curve.png) |
 
 #### MobileNetV2 Training Curves
 
@@ -433,12 +434,12 @@ and the focal-loss experiment is under
 
 #### Best Saved MobileNetV4 Training Curves
 
-![MobileNetV4 Colab middle training curves](artifacts/ecodetect/mobilenetv4_colab_middle/training_curves.png)
+![MobileNetV4 Colab best-F1 training curves](artifacts/ecodetect/mobilenetv4_colab_best_f1/training_curves.png)
 
 #### YOLOv11 Training Curves
 
-![YOLOv11 EcoDetect training results](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train/results.png)
+![YOLOv11 EcoDetect training results](artifacts/ecodetect/yolov11/train/results.png)
 
 #### YOLOv11 Precision-Recall Curve
 
-![YOLOv11 EcoDetect precision-recall curve](artifacts/ecodetect/yolov11/runs/detect/artifacts/ecodetect/yolov11/train_test/BoxPR_curve.png)
+![YOLOv11 EcoDetect precision-recall curve](artifacts/ecodetect/yolov11/train_test/BoxPR_curve.png)

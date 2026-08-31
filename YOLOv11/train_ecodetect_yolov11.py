@@ -230,7 +230,8 @@ def main() -> None:
     args = parse_args(config, config_path)
 
     dataset_dir = resolve_dataset_dir(args.dataset_dir, config.dataset_handle)
-    run_root = args.project / args.name
+    project_dir = args.project.expanduser().resolve()
+    run_root = project_dir / args.name
     data_yaml = write_prepared_data_yaml(dataset_dir, run_root)
     counts = count_files(dataset_dir)
 
@@ -254,7 +255,7 @@ def main() -> None:
         batch=args.batch,
         device=args.device,
         workers=args.workers,
-        project=str(args.project),
+        project=str(project_dir),
         name=args.name,
         exist_ok=True,
         seed=args.seed,
@@ -272,7 +273,7 @@ def main() -> None:
         batch=args.batch,
         device=args.device,
         workers=args.workers,
-        project=str(args.project),
+        project=str(project_dir),
         name=f"{args.name}_{args.eval_split}",
         exist_ok=True,
         plots=True,

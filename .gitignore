@@ -26,11 +26,11 @@ Thumbs.db
 artifacts/*
 
 # Keep selected evaluation images
-!artifacts/evaluation/
-artifacts/evaluation/*
-!artifacts/evaluation/confusion_matrix.png
-!artifacts/evaluation/confusion_matrix_normalized.png
-!artifacts/evaluation/misclassified_examples.png
+!artifacts/mobilenetv2_classifier_evaluation/
+artifacts/mobilenetv2_classifier_evaluation/*
+!artifacts/mobilenetv2_classifier_evaluation/confusion_matrix.png
+!artifacts/mobilenetv2_classifier_evaluation/confusion_matrix_normalized.png
+!artifacts/mobilenetv2_classifier_evaluation/misclassified_examples.png
 
 # Keep selected EcoDetect MobileNetV2 result images
 !artifacts/ecodetect/
@@ -41,44 +41,63 @@ artifacts/ecodetect/mobilenetv2/*
 !artifacts/ecodetect/mobilenetv2/confusion_matrix_normalized.png
 !artifacts/ecodetect/mobilenetv2/misclassified_examples.png
 
+# Keep selected EcoDetect YOLOv11 detector results
+!artifacts/ecodetect/yolov11/
+artifacts/ecodetect/yolov11/*
+!artifacts/ecodetect/yolov11/train/
+!artifacts/ecodetect/yolov11/train/*
+!artifacts/ecodetect/yolov11/train/weights/
+!artifacts/ecodetect/yolov11/train/weights/*
+!artifacts/ecodetect/yolov11/train_test/
+!artifacts/ecodetect/yolov11/train_test/*
+
 # Keep TACO Mask R-CNN results
 !artifacts/taco/
 artifacts/taco/*
-!artifacts/taco/maskrcnn_taco10_70/
-artifacts/taco/maskrcnn_taco10_70/*
-!artifacts/taco/maskrcnn_taco10_70/labels.json
-!artifacts/taco/maskrcnn_taco10_70/split_summary.json
-!artifacts/taco/maskrcnn_taco10_70/cross_validation_summary.json
-!artifacts/taco/maskrcnn_taco10_70/fold*/
-artifacts/taco/maskrcnn_taco10_70/fold*/*
-!artifacts/taco/maskrcnn_taco10_70/fold*/coco_metrics.json
-!artifacts/taco/maskrcnn_taco10_70/fold*/history.json
-!artifacts/taco/maskrcnn_taco10_70/fold*/labels.json
-!artifacts/taco/maskrcnn_taco10_70/fold*/sample_predictions.json
-!artifacts/taco/maskrcnn_taco10_70/fold*/split_summary.json
-!artifacts/taco/maskrcnn_taco10_70/fold*/test_metrics.json
-!artifacts/taco/maskrcnn_taco10_80/
-artifacts/taco/maskrcnn_taco10_80/*
-!artifacts/taco/maskrcnn_taco10_80/labels.json
-!artifacts/taco/maskrcnn_taco10_80/split_summary.json
-!artifacts/taco/maskrcnn_taco10_80/cross_validation_summary.json
-!artifacts/taco/maskrcnn_taco10_80/fold*/
-artifacts/taco/maskrcnn_taco10_80/fold*/*
-!artifacts/taco/maskrcnn_taco10_80/fold*/coco_metrics.json
-!artifacts/taco/maskrcnn_taco10_80/fold*/history.json
-!artifacts/taco/maskrcnn_taco10_80/fold*/labels.json
-!artifacts/taco/maskrcnn_taco10_80/fold*/sample_predictions.json
-!artifacts/taco/maskrcnn_taco10_80/fold*/split_summary.json
-!artifacts/taco/maskrcnn_taco10_80/fold*/test_metrics.json
-!artifacts/taco/maskrcnn_taco10_paper_score/
-artifacts/taco/maskrcnn_taco10_paper_score/*
-!artifacts/taco/maskrcnn_taco10_paper_score/labels.json
-!artifacts/taco/maskrcnn_taco10_paper_score/split_summary.json
-!artifacts/taco/maskrcnn_taco10_paper_score/cross_validation_summary.json
-!artifacts/taco/maskrcnn_taco10_paper_score/paper_score_summary.json
-!artifacts/taco/maskrcnn_taco10_paper_score/fold*/
-artifacts/taco/maskrcnn_taco10_paper_score/fold*/*
-!artifacts/taco/maskrcnn_taco10_paper_score/fold*/*.json
+!artifacts/taco/maskrcnn_taco_single_5_epochs/
+artifacts/taco/maskrcnn_taco_single_5_epochs/*
+!artifacts/taco/maskrcnn_taco_single_5_epochs/*.json
+!artifacts/taco/maskrcnn_taco_single_16_epochs/
+artifacts/taco/maskrcnn_taco_single_16_epochs/*
+!artifacts/taco/maskrcnn_taco_single_16_epochs/*.json
+!artifacts/taco/maskrcnn_taco_single_64_epochs/
+artifacts/taco/maskrcnn_taco_single_64_epochs/*
+!artifacts/taco/maskrcnn_taco_single_64_epochs/*.json
+!artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics/
+artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics/*
+!artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics/labels.json
+!artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics/split_summary.json
+!artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics/cross_validation_summary.json
+!artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics/fold*/
+artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics/fold*/*
+!artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics/fold*/coco_metrics.json
+!artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics/fold*/history.json
+!artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics/fold*/labels.json
+!artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics/fold*/sample_predictions.json
+!artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics/fold*/split_summary.json
+!artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics/fold*/test_metrics.json
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/
+artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/*
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/labels.json
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/split_summary.json
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/cross_validation_summary.json
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/fold*/
+artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/fold*/*
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/fold*/coco_metrics.json
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/fold*/history.json
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/fold*/labels.json
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/fold*/sample_predictions.json
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/fold*/split_summary.json
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/fold*/test_metrics.json
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/
+artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/*
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/labels.json
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/split_summary.json
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/cross_validation_summary.json
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/paper_score_summary.json
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/fold*/
+artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/fold*/*
+!artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/fold*/*.json
 
 checkpoints/
 logs/
@@ -88,6 +107,15 @@ logs/
 *.onnx
 *.pth
 *.pt
+!artifacts/ecodetect/yolov11/train/weights/*.pt
+
+# Keep renamed EcoDetect MobileNetV4 result folders that were already tracked
+!artifacts/ecodetect/mobilenetv4_colab_best_f1/
+!artifacts/ecodetect/mobilenetv4_colab_best_f1/*
+!artifacts/ecodetect/mobilenetv4_colab_extended_epochs/
+!artifacts/ecodetect/mobilenetv4_colab_extended_epochs/*
+!artifacts/ecodetect/mobilenetv4_local_extended_epochs/
+!artifacts/ecodetect/mobilenetv4_local_extended_epochs/*
 
 # Local datasets
 data/

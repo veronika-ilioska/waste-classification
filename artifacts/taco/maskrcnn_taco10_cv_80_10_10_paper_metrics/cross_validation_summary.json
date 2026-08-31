@@ -17,7 +17,7 @@
   ],
   "fold_summaries": [
     {
-      "output_dir": "artifacts/taco/maskrcnn_taco10/fold1",
+      "output_dir": "artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/fold1",
       "epochs_ran": 13,
       "best_val_loss": 0.610483097402673,
       "test_loss": 0.6599173412511223,
@@ -116,7 +116,7 @@
       }
     },
     {
-      "output_dir": "artifacts/taco/maskrcnn_taco10/fold2",
+      "output_dir": "artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/fold2",
       "epochs_ran": 15,
       "best_val_loss": 0.7103318462246343,
       "test_loss": 0.49901323255739716,
@@ -215,7 +215,7 @@
       }
     },
     {
-      "output_dir": "artifacts/taco/maskrcnn_taco10/fold3",
+      "output_dir": "artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/fold3",
       "epochs_ran": 9,
       "best_val_loss": 0.632821294822191,
       "test_loss": 0.5634876222986924,
@@ -314,7 +314,7 @@
       }
     },
     {
-      "output_dir": "artifacts/taco/maskrcnn_taco10/fold4",
+      "output_dir": "artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/fold4",
       "epochs_ran": 11,
       "best_val_loss": 0.6526087632304743,
       "test_loss": 0.758907496144897,

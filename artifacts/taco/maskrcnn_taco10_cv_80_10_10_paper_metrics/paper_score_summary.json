@@ -17,8 +17,8 @@
   ],
   "fold_summaries": [
     {
-      "output_dir": "artifacts/taco/maskrcnn_taco10/fold1",
-      "checkpoint": "artifacts/taco/maskrcnn_taco10/fold1/best_model.pth",
+      "output_dir": "artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/fold1",
+      "checkpoint": "artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/fold1/best_model.pth",
       "paper_score_metrics": {
         "class_score": {
           "segm": {
@@ -176,8 +176,8 @@
       }
     },
     {
-      "output_dir": "artifacts/taco/maskrcnn_taco10/fold2",
-      "checkpoint": "artifacts/taco/maskrcnn_taco10/fold2/best_model.pth",
+      "output_dir": "artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/fold2",
+      "checkpoint": "artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/fold2/best_model.pth",
       "paper_score_metrics": {
         "class_score": {
           "segm": {
@@ -335,8 +335,8 @@
       }
     },
     {
-      "output_dir": "artifacts/taco/maskrcnn_taco10/fold3",
-      "checkpoint": "artifacts/taco/maskrcnn_taco10/fold3/best_model.pth",
+      "output_dir": "artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/fold3",
+      "checkpoint": "artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/fold3/best_model.pth",
       "paper_score_metrics": {
         "class_score": {
           "segm": {
@@ -494,8 +494,8 @@
       }
     },
     {
-      "output_dir": "artifacts/taco/maskrcnn_taco10/fold4",
-      "checkpoint": "artifacts/taco/maskrcnn_taco10/fold4/best_model.pth",
+      "output_dir": "artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/fold4",
+      "checkpoint": "artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics/fold4/best_model.pth",
       "paper_score_metrics": {
         "class_score": {
           "segm": {
