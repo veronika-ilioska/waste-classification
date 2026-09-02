@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,20 +11,19 @@ import numpy as np
 import tensorflow as tf
 from dotenv import load_dotenv
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from MobileNetShared.config import (  # noqa: E402
+    config_extensions,
+    config_section,
+    configured_bool,
+    configured_value,
+    load_yaml_config,
+    merged_config_section,
+)
 
 load_dotenv()
 
-
-def env_bool(name: str, default: bool) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    raise ValueError(f"{name} must be true or false, got {value!r}.")
+DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.yaml")
 
 
 @dataclass(frozen=True)
@@ -56,46 +55,115 @@ class Config:
 
 
 def load_config() -> Config:
-    dataset_dir = os.getenv("DATASET_DIR", "").strip()
-    extensions = frozenset(
-        extension.strip().lower()
-        for extension in os.getenv(
-            "IMAGE_EXTENSIONS", ".bmp,.gif,.jpeg,.jpg,.png"
-        ).split(",")
-        if extension.strip()
+    raw_config = load_yaml_config(DEFAULT_CONFIG_PATH, required=False)
+    common_config = config_section(raw_config, "common")
+    classifier_config = (
+        config_section(raw_config, "classifier")
+        if "classifier" in raw_config
+        else raw_config
     )
+    dataset = merged_config_section(common_config, classifier_config, "dataset")
+    output = merged_config_section(common_config, classifier_config, "output")
+    model = merged_config_section(common_config, classifier_config, "model")
+    training = merged_config_section(common_config, classifier_config, "training")
+    augmentation = merged_config_section(common_config, classifier_config, "augmentation")
+    callbacks = merged_config_section(common_config, classifier_config, "callbacks")
+
+    dataset_dir = str(
+        configured_value("DATASET_DIR", dataset, "dir", "") or ""
+    ).strip()
+    image_extensions = configured_value(
+        "IMAGE_EXTENSIONS",
+        dataset,
+        "image_extensions",
+        [".bmp", ".gif", ".jpeg", ".jpg", ".png"],
+    )
+    extensions = config_extensions(image_extensions)
     return Config(
-        dataset_handle=os.getenv(
-            "DATASET_HANDLE", "shubhamdivakar/waste-classification-dataset"
+        dataset_handle=str(
+            configured_value(
+                "DATASET_HANDLE",
+                dataset,
+                "handle",
+                "shubhamdivakar/waste-classification-dataset",
+            )
         ),
         dataset_dir=Path(dataset_dir) if dataset_dir else None,
-        train_subdir=os.getenv("TRAIN_SUBDIR", "TRAIN"),
-        test_subdir=os.getenv("TEST_SUBDIR", "TEST"),
-        output_dir=Path(os.getenv("OUTPUT_DIR", "artifacts")),
+        train_subdir=str(
+            configured_value("TRAIN_SUBDIR", dataset, "train_subdir", "TRAIN")
+        ),
+        test_subdir=str(
+            configured_value("TEST_SUBDIR", dataset, "test_subdir", "TEST")
+        ),
+        output_dir=Path(
+            str(configured_value("OUTPUT_DIR", output, "dir", "artifacts"))
+        ),
         image_size=(
-            int(os.getenv("IMAGE_HEIGHT", "224")),
-            int(os.getenv("IMAGE_WIDTH", "224")),
+            int(configured_value("IMAGE_HEIGHT", model, "image_height", 224)),
+            int(configured_value("IMAGE_WIDTH", model, "image_width", 224)),
         ),
         image_extensions=extensions,
-        batch_size=int(os.getenv("BATCH_SIZE", "32")),
-        epochs=int(os.getenv("EPOCHS", "100")),
-        fine_tune_epochs=int(os.getenv("FINE_TUNE_EPOCHS", "5")),
-        fine_tune_layers=int(os.getenv("FINE_TUNE_LAYERS", "30")),
-        learning_rate=float(os.getenv("LEARNING_RATE", "0.001")),
-        fine_tune_learning_rate=float(
-            os.getenv("FINE_TUNE_LEARNING_RATE", "0.00001")
+        batch_size=int(configured_value("BATCH_SIZE", training, "batch_size", 32)),
+        epochs=int(configured_value("EPOCHS", training, "epochs", 100)),
+        fine_tune_epochs=int(
+            configured_value("FINE_TUNE_EPOCHS", training, "fine_tune_epochs", 5)
         ),
-        validation_split=float(os.getenv("VALIDATION_SPLIT", "0.2")),
-        seed=int(os.getenv("RANDOM_SEED", "42")),
-        use_imagenet_weights=env_bool("USE_IMAGENET_WEIGHTS", True),
-        random_rotation=float(os.getenv("RANDOM_ROTATION", "0.08")),
-        random_zoom=float(os.getenv("RANDOM_ZOOM", "0.1")),
-        random_contrast=float(os.getenv("RANDOM_CONTRAST", "0.1")),
-        dropout_rate=float(os.getenv("DROPOUT_RATE", "0.25")),
-        early_stopping_patience=int(os.getenv("EARLY_STOPPING_PATIENCE", "10")),
-        lr_reduction_factor=float(os.getenv("LR_REDUCTION_FACTOR", "0.2")),
-        lr_reduction_patience=int(os.getenv("LR_REDUCTION_PATIENCE", "2")),
-        min_learning_rate=float(os.getenv("MIN_LEARNING_RATE", "0.0000001")),
+        fine_tune_layers=int(
+            configured_value("FINE_TUNE_LAYERS", training, "fine_tune_layers", 30)
+        ),
+        learning_rate=float(
+            configured_value("LEARNING_RATE", training, "learning_rate", 0.001)
+        ),
+        fine_tune_learning_rate=float(
+            configured_value(
+                "FINE_TUNE_LEARNING_RATE",
+                training,
+                "fine_tune_learning_rate",
+                0.00001,
+            )
+        ),
+        validation_split=float(
+            configured_value("VALIDATION_SPLIT", training, "validation_split", 0.2)
+        ),
+        seed=int(configured_value("RANDOM_SEED", training, "seed", 42)),
+        use_imagenet_weights=configured_bool(
+            "USE_IMAGENET_WEIGHTS", model, "use_imagenet_weights", True
+        ),
+        random_rotation=float(
+            configured_value("RANDOM_ROTATION", augmentation, "random_rotation", 0.08)
+        ),
+        random_zoom=float(
+            configured_value("RANDOM_ZOOM", augmentation, "random_zoom", 0.1)
+        ),
+        random_contrast=float(
+            configured_value("RANDOM_CONTRAST", augmentation, "random_contrast", 0.1)
+        ),
+        dropout_rate=float(
+            configured_value("DROPOUT_RATE", model, "dropout_rate", 0.25)
+        ),
+        early_stopping_patience=int(
+            configured_value(
+                "EARLY_STOPPING_PATIENCE",
+                callbacks,
+                "early_stopping_patience",
+                10,
+            )
+        ),
+        lr_reduction_factor=float(
+            configured_value(
+                "LR_REDUCTION_FACTOR", callbacks, "lr_reduction_factor", 0.2
+            )
+        ),
+        lr_reduction_patience=int(
+            configured_value(
+                "LR_REDUCTION_PATIENCE", callbacks, "lr_reduction_patience", 2
+            )
+        ),
+        min_learning_rate=float(
+            configured_value(
+                "MIN_LEARNING_RATE", callbacks, "min_learning_rate", 0.0000001
+            )
+        ),
     )
 
 
@@ -271,11 +339,19 @@ def compile_model(model: tf.keras.Model, learning_rate: float) -> None:
 
 def make_callbacks(
     output_dir: Path,
+    config: Config,
 ) -> list[tf.keras.callbacks.Callback]:
     early_stopping = tf.keras.callbacks.EarlyStopping(
         monitor="val_loss",
-        patience=10,
+        patience=config.early_stopping_patience,
         restore_best_weights=True,
+    )
+
+    reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
+        monitor="val_loss",
+        factor=config.lr_reduction_factor,
+        patience=config.lr_reduction_patience,
+        min_lr=config.min_learning_rate,
     )
 
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
@@ -286,6 +362,7 @@ def make_callbacks(
 
     return [
         early_stopping,
+        reduce_lr,
         checkpoint,
     ]
 
@@ -345,7 +422,7 @@ def main() -> None:
         validation_data=val_ds,
         epochs=args.epochs,
         class_weight=class_weights,
-        callbacks=make_callbacks(args.output_dir),
+        callbacks=make_callbacks(args.output_dir, config),
     )
 
     fine_tune_history = None
@@ -365,7 +442,7 @@ def main() -> None:
             validation_data=val_ds,
             epochs=args.fine_tune_epochs,
             class_weight=class_weights,
-            callbacks=make_callbacks(args.output_dir),
+            callbacks=make_callbacks(args.output_dir, config),
         )
 
     test_metrics = model.evaluate(test_ds, return_dict=True)

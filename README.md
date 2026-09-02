@@ -53,9 +53,14 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-Copy `.env.example` to `.env` and adjust the settings when needed. Leaving
-`DATASET_DIR` empty lets `kagglehub` download or locate the dataset
-automatically.
+Copy `.env.example` to `.env` and adjust the settings when needed.
+`MobileNetV2/config.yaml` keeps shared MobileNetV2 defaults in `common`, with
+classifier-specific and EcoDetect-specific overrides under `classifier` and
+`ecodetect`. Values from `config.yaml` are used when present, environment
+variables fill missing values, and command-line arguments can still override
+both. Leaving `DATASET_DIR` empty lets `kagglehub` download or locate the
+dataset automatically.
+Shared MobileNet configuration helpers live in `MobileNetShared/config.py`.
 
 ## Training
 
@@ -63,12 +68,12 @@ automatically.
 .\.venv\Scripts\python.exe MobileNetV2\train_mobilenetv2.py
 ```
 
-Training produces the following files under `artifacts/`:
+Training produces the following files under
+`artifacts/mobilenetv2_classifier_model/` by default:
 
 - `waste_mobilenetv2.keras`: final Keras model
 - `waste_mobilenetv2.tflite`: TensorFlow Lite export
-- `best_head.keras`: best classifier-head checkpoint
-- `best_fine_tuned.keras`: best fine-tuning checkpoint
+- `best_model.keras`: best validation-loss checkpoint
 - `labels.json`: model class order
 - `history.json`: epoch-by-epoch training metrics
 - `test_metrics.json`: final test loss and accuracy

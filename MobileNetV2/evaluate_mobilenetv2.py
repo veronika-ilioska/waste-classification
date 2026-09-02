@@ -4,7 +4,8 @@ import argparse
 import csv
 import json
 import math
-import os
+import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import matplotlib
@@ -17,36 +18,107 @@ import tensorflow as tf
 from dotenv import load_dotenv
 from sklearn.metrics import classification_report, confusion_matrix
 
-from train_mobilenetv2 import load_config, resolve_dataset_dir
-
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+sys.path.insert(0, str(SCRIPT_DIR.parent))
+from MobileNetShared.config import (  # noqa: E402
+    config_section,
+    configured_value,
+    load_yaml_config,
+    merged_config_section,
+)
+from train_mobilenetv2 import (
+    load_config,
+    resolve_dataset_dir,
+)
 
 load_dotenv()
+
+DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.yaml")
+
+
+@dataclass(frozen=True)
+class EvaluationConfig:
+    model_path: Path
+    labels_path: Path
+    output_dir: Path
+    misclassified_examples: int
+
+
+def load_evaluation_config() -> EvaluationConfig:
+    training_config = load_config()
+    raw_config = load_yaml_config(DEFAULT_CONFIG_PATH, required=False)
+    common_config = config_section(raw_config, "common")
+    classifier_config = (
+        config_section(raw_config, "classifier")
+        if "classifier" in raw_config
+        else raw_config
+    )
+    evaluation = merged_config_section(common_config, classifier_config, "evaluation")
+
+    return EvaluationConfig(
+        model_path=Path(
+            str(
+                evaluation.get(
+                    "model_path",
+                    training_config.output_dir / "waste_mobilenetv2.keras",
+                )
+            )
+        ),
+        labels_path=Path(
+            str(
+                evaluation.get(
+                    "labels_path",
+                    training_config.output_dir / "labels.json",
+                )
+            )
+        ),
+        output_dir=Path(
+            str(
+                configured_value(
+                    "EVALUATION_DIR",
+                    evaluation,
+                    "output_dir",
+                    "artifacts/mobilenetv2_classifier_evaluation",
+                )
+            )
+        ),
+        misclassified_examples=int(
+            configured_value(
+                "MISCLASSIFIED_EXAMPLES",
+                evaluation,
+                "misclassified_examples",
+                25,
+            )
+        ),
+    )
 
 
 def parse_args() -> argparse.Namespace:
     config = load_config()
+    evaluation_config = load_evaluation_config()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset-dir", type=Path, default=config.dataset_dir)
     parser.add_argument(
         "--model-path",
         type=Path,
-        default=Path(os.getenv("MODEL_PATH", "artifacts/waste_mobilenetv2.keras")),
+        default=evaluation_config.model_path,
     )
     parser.add_argument(
         "--labels-path",
         type=Path,
-        default=Path(os.getenv("LABELS_PATH", "artifacts/labels.json")),
+        default=evaluation_config.labels_path,
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path(os.getenv("EVALUATION_DIR", "artifacts/mobilenetv2_classifier_evaluation")),
+        default=evaluation_config.output_dir,
     )
     parser.add_argument("--batch-size", type=int, default=config.batch_size)
     parser.add_argument(
         "--misclassified-examples",
         type=int,
-        default=int(os.getenv("MISCLASSIFIED_EXAMPLES", "25")),
+        default=evaluation_config.misclassified_examples,
     )
     return parser.parse_args()
 
