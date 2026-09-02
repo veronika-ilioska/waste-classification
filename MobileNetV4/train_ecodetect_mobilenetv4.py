@@ -27,10 +27,10 @@ from torchvision import transforms
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from MobileNetShared.config import (
-    config_extensions,
-    config_path_value,
-    config_section,
-    load_yaml_config,
+    extensions,
+    load_yaml,
+    optional_path,
+    section,
 )
 
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.yaml")
@@ -64,14 +64,14 @@ class Config:
 
 
 def load_config(config_path: Path = DEFAULT_CONFIG_PATH) -> Config:
-    raw_config = load_yaml_config(config_path)
-    dataset = config_section(raw_config, "dataset")
-    output = config_section(raw_config, "output")
-    model = config_section(raw_config, "model")
-    training = config_section(raw_config, "training")
-    augmentation = config_section(raw_config, "augmentation")
-    callbacks = config_section(raw_config, "callbacks")
-    evaluation = config_section(raw_config, "evaluation")
+    raw_config = load_yaml(config_path)
+    dataset = section(raw_config, "dataset")
+    output = section(raw_config, "output")
+    model = section(raw_config, "model")
+    training = section(raw_config, "training")
+    augmentation = section(raw_config, "augmentation")
+    callbacks = section(raw_config, "callbacks")
+    evaluation = section(raw_config, "evaluation")
     crop_scale = augmentation.get("random_resized_crop_scale", [0.85, 1.0])
 
     return Config(
@@ -81,14 +81,14 @@ def load_config(config_path: Path = DEFAULT_CONFIG_PATH) -> Config:
                 "ahsan71/ecodetect-recyclable-waste-detection-dataset",
             )
         ),
-        dataset_dir=config_path_value(dataset.get("dir")),
+        dataset_dir=optional_path(dataset.get("dir")),
         output_dir=Path(str(output.get("dir", "artifacts/ecodetect/mobilenetv4"))),
         model_name=str(model.get("name", "mobilenetv4_conv_small")),
         image_size=(
             int(model.get("image_height", 224)),
             int(model.get("image_width", 224)),
         ),
-        image_extensions=config_extensions(
+        image_extensions=extensions(
             dataset.get("image_extensions", [".bmp", ".gif", ".jpeg", ".jpg", ".png"])
         ),
         batch_size=int(training.get("batch_size", 32)),
@@ -198,7 +198,7 @@ def read_yolo_class_names(dataset_dir: Path) -> list[str]:
     data_yaml = dataset_dir / "data.yaml"
     if not data_yaml.is_file():
         return ["aluminum", "paper", "plastic"]
-    data = load_yaml_config(data_yaml)
+    data = load_yaml(data_yaml)
     names = data.get("names", ["aluminum", "paper", "plastic"])
     if isinstance(names, dict):
         return [names[index] for index in sorted(names)]

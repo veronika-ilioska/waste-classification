@@ -9,19 +9,14 @@ from pathlib import Path
 import kagglehub
 import numpy as np
 import tensorflow as tf
-from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from MobileNetShared.config import (  # noqa: E402
-    config_extensions,
-    config_section,
-    configured_bool,
-    configured_value,
-    load_yaml_config,
-    merged_config_section,
+    extensions,
+    load_yaml,
+    merged_section,
+    section,
 )
-
-load_dotenv()
 
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.yaml")
 
@@ -55,114 +50,60 @@ class Config:
 
 
 def load_config() -> Config:
-    raw_config = load_yaml_config(DEFAULT_CONFIG_PATH, required=False)
-    common_config = config_section(raw_config, "common")
+    raw_config = load_yaml(DEFAULT_CONFIG_PATH, required=False)
+    common_config = section(raw_config, "common")
     classifier_config = (
-        config_section(raw_config, "classifier")
+        section(raw_config, "classifier")
         if "classifier" in raw_config
         else raw_config
     )
-    dataset = merged_config_section(common_config, classifier_config, "dataset")
-    output = merged_config_section(common_config, classifier_config, "output")
-    model = merged_config_section(common_config, classifier_config, "model")
-    training = merged_config_section(common_config, classifier_config, "training")
-    augmentation = merged_config_section(common_config, classifier_config, "augmentation")
-    callbacks = merged_config_section(common_config, classifier_config, "callbacks")
+    dataset = merged_section(common_config, classifier_config, "dataset")
+    output = merged_section(common_config, classifier_config, "output")
+    model = merged_section(common_config, classifier_config, "model")
+    training = merged_section(common_config, classifier_config, "training")
+    augmentation = merged_section(common_config, classifier_config, "augmentation")
+    callbacks = merged_section(common_config, classifier_config, "callbacks")
 
-    dataset_dir = str(
-        configured_value("DATASET_DIR", dataset, "dir", "") or ""
-    ).strip()
-    image_extensions = configured_value(
-        "IMAGE_EXTENSIONS",
-        dataset,
-        "image_extensions",
-        [".bmp", ".gif", ".jpeg", ".jpg", ".png"],
+    dataset_dir = str(dataset.get("dir", "") or "").strip()
+    image_extensions = dataset.get(
+        "image_extensions", [".bmp", ".gif", ".jpeg", ".jpg", ".png"]
     )
-    extensions = config_extensions(image_extensions)
+    image_extensions = extensions(image_extensions)
     return Config(
         dataset_handle=str(
-            configured_value(
-                "DATASET_HANDLE",
-                dataset,
-                "handle",
-                "shubhamdivakar/waste-classification-dataset",
-            )
+            dataset.get("handle", "shubhamdivakar/waste-classification-dataset")
         ),
         dataset_dir=Path(dataset_dir) if dataset_dir else None,
-        train_subdir=str(
-            configured_value("TRAIN_SUBDIR", dataset, "train_subdir", "TRAIN")
-        ),
-        test_subdir=str(
-            configured_value("TEST_SUBDIR", dataset, "test_subdir", "TEST")
-        ),
-        output_dir=Path(
-            str(configured_value("OUTPUT_DIR", output, "dir", "artifacts"))
-        ),
+        train_subdir=str(dataset.get("train_subdir", "TRAIN")),
+        test_subdir=str(dataset.get("test_subdir", "TEST")),
+        output_dir=Path(str(output.get("dir", "artifacts"))),
         image_size=(
-            int(configured_value("IMAGE_HEIGHT", model, "image_height", 224)),
-            int(configured_value("IMAGE_WIDTH", model, "image_width", 224)),
+            int(model.get("image_height", 224)),
+            int(model.get("image_width", 224)),
         ),
-        image_extensions=extensions,
-        batch_size=int(configured_value("BATCH_SIZE", training, "batch_size", 32)),
-        epochs=int(configured_value("EPOCHS", training, "epochs", 100)),
-        fine_tune_epochs=int(
-            configured_value("FINE_TUNE_EPOCHS", training, "fine_tune_epochs", 5)
-        ),
-        fine_tune_layers=int(
-            configured_value("FINE_TUNE_LAYERS", training, "fine_tune_layers", 30)
-        ),
-        learning_rate=float(
-            configured_value("LEARNING_RATE", training, "learning_rate", 0.001)
-        ),
+        image_extensions=image_extensions,
+        batch_size=int(training.get("batch_size", 32)),
+        epochs=int(training.get("epochs", 100)),
+        fine_tune_epochs=int(training.get("fine_tune_epochs", 5)),
+        fine_tune_layers=int(training.get("fine_tune_layers", 30)),
+        learning_rate=float(training.get("learning_rate", 0.001)),
         fine_tune_learning_rate=float(
-            configured_value(
-                "FINE_TUNE_LEARNING_RATE",
-                training,
-                "fine_tune_learning_rate",
-                0.00001,
-            )
+            training.get("fine_tune_learning_rate", 0.00001)
         ),
-        validation_split=float(
-            configured_value("VALIDATION_SPLIT", training, "validation_split", 0.2)
-        ),
-        seed=int(configured_value("RANDOM_SEED", training, "seed", 42)),
-        use_imagenet_weights=configured_bool(
-            "USE_IMAGENET_WEIGHTS", model, "use_imagenet_weights", True
-        ),
-        random_rotation=float(
-            configured_value("RANDOM_ROTATION", augmentation, "random_rotation", 0.08)
-        ),
-        random_zoom=float(
-            configured_value("RANDOM_ZOOM", augmentation, "random_zoom", 0.1)
-        ),
-        random_contrast=float(
-            configured_value("RANDOM_CONTRAST", augmentation, "random_contrast", 0.1)
-        ),
-        dropout_rate=float(
-            configured_value("DROPOUT_RATE", model, "dropout_rate", 0.25)
-        ),
+        validation_split=float(training.get("validation_split", 0.2)),
+        seed=int(training.get("seed", 42)),
+        use_imagenet_weights=bool(model.get("use_imagenet_weights", True)),
+        random_rotation=float(augmentation.get("random_rotation", 0.08)),
+        random_zoom=float(augmentation.get("random_zoom", 0.1)),
+        random_contrast=float(augmentation.get("random_contrast", 0.1)),
+        dropout_rate=float(model.get("dropout_rate", 0.25)),
         early_stopping_patience=int(
-            configured_value(
-                "EARLY_STOPPING_PATIENCE",
-                callbacks,
-                "early_stopping_patience",
-                10,
-            )
+            callbacks.get("early_stopping_patience", 10)
         ),
-        lr_reduction_factor=float(
-            configured_value(
-                "LR_REDUCTION_FACTOR", callbacks, "lr_reduction_factor", 0.2
-            )
-        ),
-        lr_reduction_patience=int(
-            configured_value(
-                "LR_REDUCTION_PATIENCE", callbacks, "lr_reduction_patience", 2
-            )
-        ),
+        lr_reduction_factor=float(callbacks.get("lr_reduction_factor", 0.2)),
+        lr_reduction_patience=int(callbacks.get("lr_reduction_patience", 2)),
         min_learning_rate=float(
-            configured_value(
-                "MIN_LEARNING_RATE", callbacks, "min_learning_rate", 0.0000001
-            )
+            callbacks.get("min_learning_rate", 0.0000001)
         ),
     )
 

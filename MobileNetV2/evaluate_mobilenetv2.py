@@ -15,24 +15,20 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-from dotenv import load_dotenv
 from sklearn.metrics import classification_report, confusion_matrix
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(SCRIPT_DIR.parent))
 from MobileNetShared.config import (  # noqa: E402
-    config_section,
-    configured_value,
-    load_yaml_config,
-    merged_config_section,
+    load_yaml,
+    merged_section,
+    section,
 )
 from train_mobilenetv2 import (
     load_config,
     resolve_dataset_dir,
 )
-
-load_dotenv()
 
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.yaml")
 
@@ -47,14 +43,14 @@ class EvaluationConfig:
 
 def load_evaluation_config() -> EvaluationConfig:
     training_config = load_config()
-    raw_config = load_yaml_config(DEFAULT_CONFIG_PATH, required=False)
-    common_config = config_section(raw_config, "common")
+    raw_config = load_yaml(DEFAULT_CONFIG_PATH, required=False)
+    common_config = section(raw_config, "common")
     classifier_config = (
-        config_section(raw_config, "classifier")
+        section(raw_config, "classifier")
         if "classifier" in raw_config
         else raw_config
     )
-    evaluation = merged_config_section(common_config, classifier_config, "evaluation")
+    evaluation = merged_section(common_config, classifier_config, "evaluation")
 
     return EvaluationConfig(
         model_path=Path(
@@ -75,21 +71,13 @@ def load_evaluation_config() -> EvaluationConfig:
         ),
         output_dir=Path(
             str(
-                configured_value(
-                    "EVALUATION_DIR",
-                    evaluation,
-                    "output_dir",
-                    "artifacts/mobilenetv2_classifier_evaluation",
+                evaluation.get(
+                    "output_dir", "artifacts/mobilenetv2_classifier_evaluation"
                 )
             )
         ),
         misclassified_examples=int(
-            configured_value(
-                "MISCLASSIFIED_EXAMPLES",
-                evaluation,
-                "misclassified_examples",
-                25,
-            )
+            evaluation.get("misclassified_examples", 25)
         ),
     )
 

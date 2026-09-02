@@ -53,12 +53,10 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-Copy `.env.example` to `.env` and adjust the settings when needed.
 `MobileNetV2/config.yaml` keeps shared MobileNetV2 defaults in `common`, with
 classifier-specific and EcoDetect-specific overrides under `classifier` and
-`ecodetect`. Values from `config.yaml` are used when present, environment
-variables fill missing values, and command-line arguments can still override
-both. Leaving `DATASET_DIR` empty lets `kagglehub` download or locate the
+`ecodetect`. Command-line arguments can still override values from the YAML
+file. Leaving `dataset.dir` empty lets `kagglehub` download or locate the
 dataset automatically.
 Shared MobileNet configuration helpers live in `MobileNetShared/config.py`.
 
