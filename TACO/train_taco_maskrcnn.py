@@ -206,7 +206,7 @@ def load_config(config_path: Path) -> Config:
         image_extensions=extensions(dataset.get("image_extensions", [".jpg", ".jpeg", ".png"])),
         taxonomy=str(dataset.get("taxonomy", "taco10")),
         category_field=str(dataset.get("category_field", "supercategory")),
-        output_dir=Path(str(output.get("dir", "artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics"))),
+        output_dir=Path(str(output.get("dir", "artifacts/taco/maskrcnn_taco10_repeated_80_10_10_coco_metrics"))),
         pretrained=bool(model.get("pretrained", True)),
         weights=optional_text(model.get("weights", "DEFAULT")),
         batch_size=int(training.get("batch_size", 2)),
@@ -216,8 +216,8 @@ def load_config(config_path: Path) -> Config:
         weight_decay=float(training.get("weight_decay", 0.0005)),
         workers=int(training.get("workers", 0)),
         seed=int(training.get("seed", 42)),
-        val_fraction=float(training.get("val_fraction", 0.15)),
-        test_fraction=float(training.get("test_fraction", 0.15)),
+        val_fraction=float(training.get("val_fraction", 0.1)),
+        test_fraction=float(training.get("test_fraction", 0.1)),
         patience=int(training.get("patience", 5)),
         device=optional_text(training.get("device")),
         horizontal_flip_probability=float(augmentation.get("horizontal_flip_probability", 0.5)),
@@ -234,7 +234,7 @@ def load_config(config_path: Path) -> Config:
         noise_std=float(augmentation.get("noise_std", 0.0)),
         evaluation_score_threshold=float(evaluation.get("score_threshold", 0.001)),
         cross_validation=bool(cross_validation.get("enabled", False)),
-        folds=int(cross_validation.get("folds", 4)),
+        folds=int(cross_validation.get("folds", 10)),
     )
 
 
@@ -273,9 +273,14 @@ def parse_args(config: Config, config_path: Path) -> argparse.Namespace:
         "--cross-validation",
         action=argparse.BooleanOptionalAction,
         default=config.cross_validation,
-        help="Train/evaluate rotated folds instead of one random train/val/test split.",
+        help="Train/evaluate repeated random train/val/test splits instead of one split.",
     )
-    parser.add_argument("--folds", type=int, default=config.folds)
+    parser.add_argument(
+        "--folds",
+        type=int,
+        default=config.folds,
+        help="Number of repeated random splits to run when --cross-validation is enabled.",
+    )
     parser.add_argument(
         "--evaluation-score-threshold",
         type=float,
@@ -286,14 +291,14 @@ def parse_args(config: Config, config_path: Path) -> argparse.Namespace:
         "--paper-score-eval-only",
         action="store_true",
         help=(
-            "Load saved fold checkpoints and evaluate TACO-paper-style "
+            "Load saved split checkpoints and evaluate TACO-paper-style "
             "class, litter, and ratio prediction scores without retraining."
         ),
     )
     parser.add_argument(
         "--checkpoint-name",
         default="best_model.pth",
-        help="Checkpoint filename to load inside each fold directory for --paper-score-eval-only.",
+        help="Checkpoint filename to load inside each split directory for --paper-score-eval-only.",
     )
     parser.add_argument("--no-pretrained", action="store_true")
     parser.add_argument("--check-only", action="store_true")
@@ -471,103 +476,6 @@ def record_label_counts(
         if label is not None and 0 <= label < class_count:
             counts[label] += 1
     return counts
-
-
-def split_records_into_folds(
-    records: list[dict[str, Any]],
-    annotations_by_image: dict[int, list[dict[str, Any]]],
-    raw_id_to_label: dict[int, int],
-    class_count: int,
-    folds: int,
-    seed: int,
-) -> list[list[dict[str, Any]]]:
-    annotated = [record for record in records if annotations_by_image.get(int(record["id"]))]
-    if folds < 2:
-        raise ValueError("--folds must be at least 2.")
-    if len(annotated) < folds:
-        raise ValueError(f"Need at least {folds} annotated images for {folds}-fold evaluation.")
-
-    rng = random.Random(seed)
-    buckets: dict[int, list[dict[str, Any]]] = defaultdict(list)
-    for record in annotated:
-        counts = record_label_counts(record, annotations_by_image, raw_id_to_label, class_count)
-        bucket = max(range(1, class_count), key=lambda index: counts[index]) if sum(counts) else 0
-        buckets[bucket].append(record)
-
-    fold_records: list[list[dict[str, Any]]] = [[] for _ in range(folds)]
-    for bucket_index, bucket_records in sorted(buckets.items()):
-        rng.shuffle(bucket_records)
-        start_fold = bucket_index % folds
-        for offset, record in enumerate(bucket_records):
-            fold_index = min(
-                range(folds),
-                key=lambda index: (
-                    len(fold_records[index]),
-                    (index - start_fold - offset) % folds,
-                ),
-            )
-            fold_records[fold_index].append(record)
-
-    if any(not fold for fold in fold_records):
-        raise ValueError("Could not create non-empty folds. Try fewer folds.")
-    return [sorted(fold, key=lambda record: int(record["id"])) for fold in fold_records]
-
-
-def split_records_preserving_distribution(
-    records: list[dict[str, Any]],
-    annotations_by_image: dict[int, list[dict[str, Any]]],
-    raw_id_to_label: dict[int, int],
-    class_count: int,
-    val_fraction: float,
-    test_fraction: float,
-    seed: int,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    if val_fraction < 0 or test_fraction < 0 or val_fraction + test_fraction >= 1:
-        raise ValueError("--val-fraction and --test-fraction must be nonnegative and sum below 1.")
-
-    annotated = [record for record in records if annotations_by_image.get(int(record["id"]))]
-    if not annotated:
-        raise ValueError("No annotated TACO images were found.")
-
-    rng = random.Random(seed)
-    buckets: dict[int, list[dict[str, Any]]] = defaultdict(list)
-    for record in annotated:
-        counts = record_label_counts(record, annotations_by_image, raw_id_to_label, class_count)
-        bucket = max(range(1, class_count), key=lambda index: counts[index]) if sum(counts) else 0
-        buckets[bucket].append(record)
-
-    train: list[dict[str, Any]] = []
-    val: list[dict[str, Any]] = []
-    test: list[dict[str, Any]] = []
-    for bucket_records in buckets.values():
-        rng.shuffle(bucket_records)
-        total = len(bucket_records)
-        test_count = int(round(total * test_fraction)) if test_fraction else 0
-        val_count = int(round(total * val_fraction)) if val_fraction else 0
-        if total >= 3:
-            if test_fraction and test_count == 0:
-                test_count = 1
-            if val_fraction and val_count == 0:
-                val_count = 1
-        if test_count + val_count >= total:
-            overflow = test_count + val_count - total + 1
-            if val_count >= test_count:
-                val_count = max(0, val_count - overflow)
-            else:
-                test_count = max(0, test_count - overflow)
-
-        test.extend(bucket_records[:test_count])
-        val.extend(bucket_records[test_count : test_count + val_count])
-        train.extend(bucket_records[test_count + val_count :])
-
-    if not train or not val or not test:
-        return split_records(annotated, annotations_by_image, val_fraction, test_fraction, seed)
-
-    return (
-        sorted(train, key=lambda record: int(record["id"])),
-        sorted(val, key=lambda record: int(record["id"])),
-        sorted(test, key=lambda record: int(record["id"])),
-    )
 
 
 def summarize_record_distribution(
@@ -1475,6 +1383,8 @@ def evaluate_coco_metrics(
     output_dir: Path,
     device: torch.device,
     score_threshold: float,
+    file_prefix: str = "coco_test",
+    metrics_filename: str = "coco_metrics.json",
 ) -> dict[str, dict[str, float]]:
     ground_truth = coco_ground_truth(
         test_records,
@@ -1482,8 +1392,9 @@ def evaluate_coco_metrics(
         raw_id_to_label,
         class_names,
     )
-    ground_truth_path = output_dir / "coco_test_ground_truth.json"
-    predictions_path = output_dir / "coco_test_predictions.json"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    ground_truth_path = output_dir / f"{file_prefix}_ground_truth.json"
+    predictions_path = output_dir / f"{file_prefix}_predictions.json"
     ground_truth_path.write_text(json.dumps(ground_truth), encoding="utf-8")
 
     predictions = collect_coco_predictions(model, test_loader, device, score_threshold)
@@ -1493,7 +1404,7 @@ def evaluate_coco_metrics(
         "segm": run_coco_eval(ground_truth_path, predictions_path, "segm"),
         "bbox": run_coco_eval(ground_truth_path, predictions_path, "bbox"),
     }
-    (output_dir / "coco_metrics.json").write_text(
+    (output_dir / metrics_filename).write_text(
         json.dumps(metrics, indent=2),
         encoding="utf-8",
     )
@@ -1624,6 +1535,39 @@ def average_coco_metrics(fold_summaries: list[dict[str, Any]]) -> dict[str, dict
     return averaged
 
 
+def coco_metric_confidence_intervals(
+    split_summaries: list[dict[str, Any]],
+) -> dict[str, dict[str, dict[str, float]]]:
+    stats: dict[str, dict[str, dict[str, float]]] = {}
+    for metric_type in ("segm", "bbox"):
+        keys = sorted(
+            {
+                key
+                for summary in split_summaries
+                for key in summary["coco_metrics"][metric_type]
+            }
+        )
+        stats[metric_type] = {}
+        for key in keys:
+            values = np.array(
+                [
+                    summary["coco_metrics"][metric_type][key]
+                    for summary in split_summaries
+                ],
+                dtype=float,
+            )
+            mean = float(values.mean()) if values.size else 0.0
+            std = float(values.std(ddof=1)) if values.size > 1 else 0.0
+            ci95 = float(1.96 * std / math.sqrt(values.size)) if values.size > 1 else 0.0
+            stats[metric_type][key] = {
+                "mean": mean,
+                "std": std,
+                "ci95": ci95,
+                "n": int(values.size),
+            }
+    return stats
+
+
 def average_paper_score_metrics(
     fold_summaries: list[dict[str, Any]],
 ) -> dict[str, dict[str, dict[str, float]]]:
@@ -1656,6 +1600,48 @@ def average_paper_score_metrics(
                 for key in keys
             }
     return averaged
+
+
+def paper_score_metric_confidence_intervals(
+    split_summaries: list[dict[str, Any]],
+) -> dict[str, dict[str, dict[str, dict[str, float]]]]:
+    stats: dict[str, dict[str, dict[str, dict[str, float]]]] = {}
+    score_names = sorted(
+        {
+            score_name
+            for summary in split_summaries
+            for score_name in summary["paper_score_metrics"]
+        }
+    )
+    for score_name in score_names:
+        stats[score_name] = {}
+        for metric_type in ("segm", "bbox"):
+            keys = sorted(
+                {
+                    key
+                    for summary in split_summaries
+                    for key in summary["paper_score_metrics"][score_name][metric_type]
+                }
+            )
+            stats[score_name][metric_type] = {}
+            for key in keys:
+                values = np.array(
+                    [
+                        summary["paper_score_metrics"][score_name][metric_type][key]
+                        for summary in split_summaries
+                    ],
+                    dtype=float,
+                )
+                mean = float(values.mean()) if values.size else 0.0
+                std = float(values.std(ddof=1)) if values.size > 1 else 0.0
+                ci95 = float(1.96 * std / math.sqrt(values.size)) if values.size > 1 else 0.0
+                stats[score_name][metric_type][key] = {
+                    "mean": mean,
+                    "std": std,
+                    "ci95": ci95,
+                    "n": int(values.size),
+                }
+    return stats
 
 
 def run_paper_score_evaluation_split(
@@ -1710,6 +1696,31 @@ def run_paper_score_evaluation_split(
         "checkpoint": str(checkpoint_path),
         "paper_score_metrics": paper_score_metrics,
     }
+
+
+def build_warmup_cosine_scheduler(
+    optimizer: torch.optim.Optimizer,
+    epochs: int,
+    warmup_epochs: int | None = None,
+) -> torch.optim.lr_scheduler.LRScheduler:
+    warmup = warmup_epochs if warmup_epochs is not None else min(5, max(1, epochs // 10))
+    warmup = min(warmup, max(1, epochs))
+    warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+        optimizer,
+        start_factor=1.0 / warmup,
+        end_factor=1.0,
+        total_iters=warmup,
+    )
+    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=max(1, epochs - warmup),
+        eta_min=0.0,
+    )
+    return torch.optim.lr_scheduler.SequentialLR(
+        optimizer,
+        schedulers=[warmup_scheduler, cosine_scheduler],
+        milestones=[warmup],
+    )
 
 
 def run_training_split(
@@ -1820,23 +1831,42 @@ def run_training_split(
         momentum=config.momentum,
         weight_decay=config.weight_decay,
     )
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
-    history = {"loss": [], "val_loss": []}
+    scheduler = build_warmup_cosine_scheduler(optimizer, args.epochs)
+    history = {"loss": [], "val_loss": [], "val_mask_ap": [], "lr": []}
+    best_val_ap = -math.inf
     best_val_loss = math.inf
     patience_counter = 0
 
     for epoch in range(1, args.epochs + 1):
+        current_lr = optimizer.param_groups[0]["lr"]
         train_loss = train_one_epoch(model, train_loader, optimizer, device, epoch)
         val_loss = evaluate_loss(model, val_loader, device)
-        scheduler.step()
+        val_metrics = evaluate_coco_metrics(
+            model,
+            val_loader,
+            val_records,
+            annotations_by_image,
+            raw_id_to_label,
+            class_names,
+            output_dir / "validation_metrics" / f"epoch_{epoch:03d}",
+            device,
+            args.evaluation_score_threshold,
+            file_prefix="coco_val",
+            metrics_filename="coco_val_metrics.json",
+        )
+        val_mask_ap = val_metrics["segm"]["AP"]
         history["loss"].append(train_loss)
         history["val_loss"].append(val_loss)
+        history["val_mask_ap"].append(val_mask_ap)
+        history["lr"].append(current_lr)
         print(
             f"{split_name} epoch {epoch}/{args.epochs}: "
-            f"loss={train_loss:.4f} val_loss={val_loss:.4f}"
+            f"loss={train_loss:.4f} val_loss={val_loss:.4f} "
+            f"val_mask_ap={val_mask_ap:.4f} lr={current_lr:.6g}"
         )
 
-        if val_loss < best_val_loss:
+        if val_mask_ap > best_val_ap:
+            best_val_ap = val_mask_ap
             best_val_loss = val_loss
             patience_counter = 0
             torch.save(model.state_dict(), output_dir / "best_model.pth")
@@ -1845,6 +1875,7 @@ def run_training_split(
             if 0 < args.patience <= patience_counter:
                 print(f"{split_name} early stopping after {epoch} epochs.")
                 break
+        scheduler.step()
 
     if (output_dir / "best_model.pth").is_file():
         model.load_state_dict(torch.load(output_dir / "best_model.pth", map_location=device))
@@ -1880,6 +1911,7 @@ def run_training_split(
         "output_dir": str(output_dir),
         "epochs_ran": len(history["loss"]),
         "best_val_loss": float(best_val_loss),
+        "best_val_mask_ap": float(best_val_ap),
         "test_loss": float(test_loss),
         "coco_metrics": coco_metrics,
     }
@@ -1895,35 +1927,22 @@ def run_cross_validation(
     class_names: list[str],
     device: torch.device,
 ) -> None:
-    folds = split_records_into_folds(
-        records,
-        annotations_by_image,
-        raw_id_to_label,
-        len(class_names),
-        args.folds,
-        args.seed,
-    )
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    fold_summaries: list[dict[str, Any]] = []
+    if args.folds < 1:
+        raise ValueError("--folds must be at least 1.")
 
-    for fold_index in range(args.folds):
-        fold_records = folds[fold_index]
-        train_records, val_records, test_records = split_records_preserving_distribution(
-            fold_records,
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    split_summaries: list[dict[str, Any]] = []
+
+    for split_index in range(args.folds):
+        split_seed = args.seed + split_index
+        train_records, val_records, test_records = split_records(
+            records,
             annotations_by_image,
-            raw_id_to_label,
-            len(class_names),
             args.val_fraction,
             args.test_fraction,
-            args.seed + fold_index,
+            split_seed,
         )
         split_distribution = {
-            "fold": summarize_record_distribution(
-                fold_records,
-                annotations_by_image,
-                raw_id_to_label,
-                class_names,
-            ),
             "train": summarize_record_distribution(
                 train_records,
                 annotations_by_image,
@@ -1943,10 +1962,10 @@ def run_cross_validation(
                 class_names,
             ),
         }
-        fold_output_dir = args.output_dir / f"fold{fold_index + 1}"
+        split_output_dir = args.output_dir / f"split{split_index + 1}"
         print(
-            f"Fold {fold_index + 1}/{args.folds}: "
-            f"{len(fold_records)} total, "
+            f"Split {split_index + 1}/{args.folds} "
+            f"(seed={split_seed}): "
             f"{len(train_records)} train, {len(val_records)} val, {len(test_records)} test images"
         )
         if args.paper_score_eval_only:
@@ -1958,9 +1977,9 @@ def run_cross_validation(
                 raw_id_to_label,
                 class_names,
                 test_records,
-                fold_output_dir,
+                split_output_dir,
                 device,
-                split_name=f"fold {fold_index + 1}",
+                split_name=f"split {split_index + 1}",
             )
         else:
             summary = run_training_split(
@@ -1973,59 +1992,75 @@ def run_cross_validation(
                 train_records,
                 val_records,
                 test_records,
-                fold_output_dir,
+                split_output_dir,
                 device,
-                split_name=f"fold {fold_index + 1}",
+                split_name=f"split {split_index + 1}",
             )
         summary.update(
             {
-                "fold": fold_index + 1,
+                "split": split_index + 1,
+                "seed": split_seed,
                 "split_distribution": split_distribution,
             }
         )
-        fold_summaries.append(summary)
+        split_summaries.append(summary)
 
     if args.paper_score_eval_only:
-        completed = [summary for summary in fold_summaries if "paper_score_metrics" in summary]
+        completed = [summary for summary in split_summaries if "paper_score_metrics" in summary]
         average_metrics = average_paper_score_metrics(completed) if completed else {}
+        metric_stats = paper_score_metric_confidence_intervals(completed) if completed else {}
         cv_summary = {
-            "folds": args.folds,
+            "protocol": "repeated_random_80_10_10_splits",
+            "splits": args.folds,
             "val_fraction": args.val_fraction,
             "test_fraction": args.test_fraction,
             "classes": class_names,
-            "fold_summaries": fold_summaries,
+            "split_summaries": split_summaries,
             "average_paper_score_metrics": average_metrics,
+            "paper_score_metric_stats": metric_stats,
         }
         (args.output_dir / "paper_score_summary.json").write_text(
             json.dumps(cv_summary, indent=2),
             encoding="utf-8",
         )
         for score_name, metrics in average_metrics.items():
-            print(f"Average {score_name} mask AP: {metrics['segm']['AP']:.4f}")
+            ci95 = metric_stats.get(score_name, {}).get("segm", {}).get("AP", {}).get("ci95", 0.0)
+            print(f"Average {score_name} mask AP: {metrics['segm']['AP']:.4f} +/- {ci95:.4f} (95% CI)")
         print(f"Paper-score summary saved to {args.output_dir / 'paper_score_summary.json'}")
         return
 
-    completed = [summary for summary in fold_summaries if "coco_metrics" in summary]
+    completed = [summary for summary in split_summaries if "coco_metrics" in summary]
     average_metrics = average_coco_metrics(completed) if completed else {}
+    metric_stats = coco_metric_confidence_intervals(completed) if completed else {}
     cv_summary = {
-        "folds": args.folds,
+        "protocol": "repeated_random_80_10_10_splits",
+        "splits": args.folds,
         "val_fraction": args.val_fraction,
         "test_fraction": args.test_fraction,
         "classes": class_names,
-        "fold_summaries": fold_summaries,
+        "split_summaries": split_summaries,
         "average_coco_metrics": average_metrics,
+        "coco_metric_stats": metric_stats,
         "average_mask_ap": average_metrics.get("segm", {}).get("AP"),
         "average_bbox_ap": average_metrics.get("bbox", {}).get("AP"),
+        "mask_ap_ci95": metric_stats.get("segm", {}).get("AP", {}).get("ci95"),
+        "bbox_ap_ci95": metric_stats.get("bbox", {}).get("AP", {}).get("ci95"),
     }
     (args.output_dir / "cross_validation_summary.json").write_text(
         json.dumps(cv_summary, indent=2),
         encoding="utf-8",
     )
     if args.check_only:
-        print("Cross-validation check complete. No training was run.")
+        print("Repeated-split check complete. No training was run.")
     else:
-        print(f"Average mask AP: {cv_summary['average_mask_ap']:.4f}")
-        print(f"Average bbox AP: {cv_summary['average_bbox_ap']:.4f}")
+        print(
+            f"Average mask AP: {cv_summary['average_mask_ap']:.4f} "
+            f"+/- {cv_summary['mask_ap_ci95']:.4f} (95% CI)"
+        )
+        print(
+            f"Average bbox AP: {cv_summary['average_bbox_ap']:.4f} "
+            f"+/- {cv_summary['bbox_ap_ci95']:.4f} (95% CI)"
+        )
     print(f"Cross-validation summary saved to {args.output_dir / 'cross_validation_summary.json'}")
 
 

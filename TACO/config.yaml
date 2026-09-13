@@ -9,7 +9,7 @@ dataset:
   category_field: supercategory
 
 output:
-  dir: artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics
+  dir: artifacts/taco/maskrcnn_taco10_repeated_80_10_10_coco_metrics
 
 model:
   pretrained: true
@@ -23,8 +23,8 @@ training:
   weight_decay: 0.0005
   workers: 0
   seed: 42
-  val_fraction: 0.15
-  test_fraction: 0.15
+  val_fraction: 0.1
+  test_fraction: 0.1
   patience: 5
   device: auto
 
@@ -49,4 +49,4 @@ evaluation:
 
 cross_validation:
   enabled: true
-  folds: 4
+  folds: 10

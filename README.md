@@ -212,7 +212,7 @@ Train Mask R-CNN:
 .\.venv\Scripts\python.exe TACO\train_taco_maskrcnn.py
 ```
 
-Evaluate saved cross-validation checkpoints with the TACO paper's prediction
+Evaluate saved repeated-split checkpoints with the TACO paper's prediction
 ranking scores without retraining:
 
 ```powershell
@@ -221,7 +221,8 @@ ranking scores without retraining:
   --paper-score-eval-only `
   --val-fraction 0.1 `
   --test-fraction 0.1 `
-  --output-dir artifacts\taco\maskrcnn_taco10_cv_80_10_10_paper_metrics
+  --folds 10 `
+  --output-dir artifacts\taco\maskrcnn_taco10_repeated_80_10_10_coco_metrics
 ```
 
 The default `training.device: auto` uses CUDA automatically when a GPU is
@@ -234,7 +235,7 @@ By default the script uses the paper-style TACO-10 taxonomy: `Bottle`,
 `Plastic bag + wrapper`, `Pop tab`, and `Straw`. Change `dataset.taxonomy` to
 `category-field` if you want to group categories by `dataset.category_field`
 instead. Outputs are saved under the configured `output.dir`, which defaults to
-`artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics`.
+`artifacts/taco/maskrcnn_taco10_repeated_80_10_10_coco_metrics`.
 
 Training augmentations are configured in `TACO/config.yaml`. The default setup
 uses horizontal flips, small rotations, object-centered random crops, brightness
@@ -242,85 +243,46 @@ and contrast changes, saturation and hue jitter, Gaussian blur, and Gaussian
 noise. Geometric augmentations are applied to both images and masks, then boxes
 and areas are recomputed from the transformed masks.
 
-After training, the script evaluates the test split with COCO-style metrics for
-both masks and boxes. The main segmentation values are written to
+After training, the script evaluates each test split with COCO-style metrics
+for both masks and boxes. The main segmentation values are written to
 `coco_metrics.json` and `test_metrics.json` as `segm.AP`, `segm.AP50`, and
-`segm.AP75`. This requires `pycocotools`, which is included in
+`segm.AP75`. During training, `best_model.pth` is selected by validation mask
+AP, not validation loss. The learning-rate schedule uses warmup followed by
+cosine decay. This requires `pycocotools`, which is included in
 `requirements.txt`.
 
-### TACO Mask R-CNN Cross-Validation Results
+### TACO Mask R-CNN Repeated-Split Results
 
-Two saved TACO-10 experiments use 4-fold cross validation with different
-train/validation/test ratios. The 70/15/15 run is saved under
-[`artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics`](artifacts/taco/maskrcnn_taco10_cv_70_15_15_coco_metrics), and
-the 80/10/10 run is saved under
-[`artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics`](artifacts/taco/maskrcnn_taco10_cv_80_10_10_coco_metrics).
+The default TACO protocol now repeats 10 random 80/10/10 train/validation/test
+splits over the full annotated dataset. Each run trains on roughly 80% of all
+TACO images, instead of first dividing the dataset into smaller fold partitions.
+The aggregate `cross_validation_summary.json` reports per-split results plus
+mean, standard deviation, and 95% confidence intervals under
+`coco_metric_stats`.
 
-The referenced TACO paper uses Mask R-CNN on TACO-10 with 4-fold cross
-validation, an 80% training, 10% validation, and 10% test split inside each
-fold, and mask Average Precision (AP) as the main metric. The regular
-repository runs below use Torchvision's standard COCO-style prediction scores,
-so they should be compared against each other rather than treated as direct
-paper reproductions. A separate paper-style evaluation is included afterward.
-
-#### 70/15/15 Split
-
-| Fold | Epochs run | Mask AP | Mask AP50 | Mask AP75 | Bbox AP |
-|---|---:|---:|---:|---:|---:|
-| 1 | 18 | 19.79% | 26.09% | 21.93% | 17.31% |
-| 2 | 14 | 22.58% | 33.08% | 25.84% | 22.03% |
-| 3 | 13 | 28.64% | 36.75% | 31.08% | 27.51% |
-| 4 | 10 | 15.27% | 21.00% | 16.97% | 13.86% |
-| **Average** |  | **21.57%** | **29.23%** | **23.95%** | **20.18%** |
-
-#### 80/10/10 Split
-
-| Fold | Epochs run | Mask AP | Mask AP50 | Mask AP75 | Bbox AP |
-|---|---:|---:|---:|---:|---:|
-| 1 | 13 | 15.49% | 20.85% | 18.30% | 13.44% |
-| 2 | 15 | 32.57% | 46.81% | 36.11% | 28.24% |
-| 3 | 9 | 27.27% | 36.00% | 33.31% | 25.11% |
-| 4 | 11 | 18.51% | 26.47% | 21.32% | 16.57% |
-| **Average** |  | **23.46%** | **32.53%** | **27.26%** | **20.84%** |
-
-#### Split Comparison
-
-| Split | Train/val/test images across fold partitions | Mask AP | Mask AP50 | Mask AP75 | Bbox AP | Mask AR100 |
-|---|---|---:|---:|---:|---:|---:|
-| 70/15/15 | 1,054 / 223 / 223 | 21.57 +/- 5.59 | 29.23 +/- 7.05 | 23.95 +/- 5.97 | 20.18 +/- 5.92 | 43.19% |
-| 80/10/10 | 1,196 / 152 / 152 | **23.46 +/- 7.86** | **32.53 +/- 11.39** | **27.26 +/- 8.77** | **20.84 +/- 6.98** | **46.14%** |
-
-The 80/10/10 split has the better saved results. It improves the main mask AP
-by 1.89 percentage points over the 70/15/15 split, with stronger AP50, AP75,
-bbox AP, and mask recall. The tradeoff is that the 80/10/10 run evaluates on
-fewer validation and test images per fold, and its fold-to-fold standard
-deviation is higher, so the improvement should be treated as a promising but
-not definitive margin.
+Older saved runs under `artifacts/taco/maskrcnn_taco10_cv_*` used a different
+procedure: the dataset was split into four partitions first, then each model
+used 80/10/10 inside one partition. Those artifacts are retained for reference,
+but they are not a paper-equivalent reproduction because each model saw only
+about a quarter of the intended training images.
 
 #### Paper-Style Score Evaluation
 
-The saved 80/10/10 checkpoints were also re-evaluated with the paper's three
-prediction-ranking scores. Those artifacts are saved under
-[`artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics`](artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics),
-with the aggregate values in
-[`paper_score_summary.json`](artifacts/taco/maskrcnn_taco10_cv_80_10_10_paper_metrics/paper_score_summary.json).
+Saved repeated-split checkpoints can also be re-evaluated with the paper's
+three prediction-ranking scores: class score, litter score, and ratio score.
+The aggregate values are written to `paper_score_summary.json` in the selected
+output directory.
 
-| Evaluation | Mask AP |
+| Evaluation | Paper Mask AP |
 |---|---:|
-| Paper, class score | 17.6 +/- 1.6 |
-| This repository, class score | 15.70 +/- 4.13 |
-| Paper, litter score | 18.4 +/- 1.5 |
-| This repository, litter score | 16.00 +/- 3.69 |
-| Paper, ratio score | **19.4 +/- 1.5** |
-| This repository, ratio score | 16.89 +/- 4.40 |
+| Class score | 17.6 +/- 1.6 |
+| Litter score | 18.4 +/- 1.5 |
+| Ratio score | **19.4 +/- 1.5** |
 
-With the paper-style scoring, the repository's best result is the ratio score
-at 16.89 AP. That is lower than the paper's reported ratio-score result of
-19.4 AP, so the paper-style comparison does not show an improvement over the
-paper. The strongest conclusion from these artifacts is that 80/10/10 is the
-better split under the repository's standard COCO-style evaluation, while ratio
-score is the best of the three paper-style ranking methods for the saved
-80/10/10 checkpoints.
+Repository values should be filled from the new repeated-split artifacts after
+the corrected protocol is rerun. The older repository values from the 4-way
+partitioned experiment are no longer listed here because they used much smaller
+training sets and should not be compared directly with the paper.
 
 ## EcoDetect Model Comparison
 
