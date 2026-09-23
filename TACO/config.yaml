@@ -9,7 +9,7 @@ dataset:
   category_field: supercategory
 
 output:
-  dir: artifacts/taco/maskrcnn_taco10_repeated_80_10_10_coco_metrics
+  dir: artifacts/taco/maskrcnn_taco10_stratified_80_10_10_coco_metrics
 
 model:
   pretrained: true
@@ -26,6 +26,7 @@ training:
   val_fraction: 0.1
   test_fraction: 0.1
   patience: 5
+  split_strategy: stratified
   device: auto
 
 augmentation:

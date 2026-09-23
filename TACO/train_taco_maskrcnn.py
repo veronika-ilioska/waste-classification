@@ -128,6 +128,7 @@ class Config:
     val_fraction: float
     test_fraction: float
     patience: int
+    split_strategy: str
     device: str | None
     horizontal_flip_probability: float
     rotation_degrees: float
@@ -206,7 +207,7 @@ def load_config(config_path: Path) -> Config:
         image_extensions=extensions(dataset.get("image_extensions", [".jpg", ".jpeg", ".png"])),
         taxonomy=str(dataset.get("taxonomy", "taco10")),
         category_field=str(dataset.get("category_field", "supercategory")),
-        output_dir=Path(str(output.get("dir", "artifacts/taco/maskrcnn_taco10_repeated_80_10_10_coco_metrics"))),
+        output_dir=Path(str(output.get("dir", "artifacts/taco/maskrcnn_taco10_stratified_80_10_10_coco_metrics"))),
         pretrained=bool(model.get("pretrained", True)),
         weights=optional_text(model.get("weights", "DEFAULT")),
         batch_size=int(training.get("batch_size", 2)),
@@ -219,6 +220,7 @@ def load_config(config_path: Path) -> Config:
         val_fraction=float(training.get("val_fraction", 0.1)),
         test_fraction=float(training.get("test_fraction", 0.1)),
         patience=int(training.get("patience", 5)),
+        split_strategy=str(training.get("split_strategy", "stratified")),
         device=optional_text(training.get("device")),
         horizontal_flip_probability=float(augmentation.get("horizontal_flip_probability", 0.5)),
         rotation_degrees=float(augmentation.get("rotation_degrees", 0.0)),
@@ -268,6 +270,12 @@ def parse_args(config: Config, config_path: Path) -> argparse.Namespace:
     parser.add_argument("--val-fraction", type=float, default=config.val_fraction)
     parser.add_argument("--test-fraction", type=float, default=config.test_fraction)
     parser.add_argument("--patience", type=int, default=config.patience)
+    parser.add_argument(
+        "--split-strategy",
+        choices=["random", "stratified"],
+        default=config.split_strategy,
+        help="Use fully random splits or preserve the dataset's dominant-class distribution.",
+    )
     parser.add_argument("--device", default=config.device)
     parser.add_argument(
         "--cross-validation",
@@ -476,6 +484,98 @@ def record_label_counts(
         if label is not None and 0 <= label < class_count:
             counts[label] += 1
     return counts
+
+
+def dominant_label_bucket(
+    record: dict[str, Any],
+    annotations_by_image: dict[int, list[dict[str, Any]]],
+    raw_id_to_label: dict[int, int],
+    class_count: int,
+) -> int:
+    counts = record_label_counts(record, annotations_by_image, raw_id_to_label, class_count)
+    return max(range(1, class_count), key=lambda index: counts[index]) if sum(counts) else 0
+
+
+def split_records_preserving_distribution(
+    records: list[dict[str, Any]],
+    annotations_by_image: dict[int, list[dict[str, Any]]],
+    raw_id_to_label: dict[int, int],
+    class_count: int,
+    val_fraction: float,
+    test_fraction: float,
+    seed: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    if val_fraction < 0 or test_fraction < 0 or val_fraction + test_fraction >= 1:
+        raise ValueError("--val-fraction and --test-fraction must be nonnegative and sum below 1.")
+
+    annotated = [record for record in records if annotations_by_image.get(int(record["id"]))]
+    if not annotated:
+        raise ValueError("No annotated TACO images were found.")
+
+    rng = random.Random(seed)
+    buckets: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for record in annotated:
+        bucket = dominant_label_bucket(record, annotations_by_image, raw_id_to_label, class_count)
+        buckets[bucket].append(record)
+
+    train: list[dict[str, Any]] = []
+    val: list[dict[str, Any]] = []
+    test: list[dict[str, Any]] = []
+    for bucket_records in buckets.values():
+        bucket_records = list(bucket_records)
+        rng.shuffle(bucket_records)
+        total = len(bucket_records)
+        test_count = int(round(total * test_fraction)) if test_fraction else 0
+        val_count = int(round(total * val_fraction)) if val_fraction else 0
+        if total >= 3:
+            if test_fraction and test_count == 0:
+                test_count = 1
+            if val_fraction and val_count == 0:
+                val_count = 1
+        if test_count + val_count >= total:
+            overflow = test_count + val_count - total + 1
+            if val_count >= test_count:
+                val_count = max(0, val_count - overflow)
+            else:
+                test_count = max(0, test_count - overflow)
+
+        test.extend(bucket_records[:test_count])
+        val.extend(bucket_records[test_count : test_count + val_count])
+        train.extend(bucket_records[test_count + val_count :])
+
+    if not train or not val or not test:
+        return split_records(annotated, annotations_by_image, val_fraction, test_fraction, seed)
+
+    return (
+        sorted(train, key=lambda record: int(record["id"])),
+        sorted(val, key=lambda record: int(record["id"])),
+        sorted(test, key=lambda record: int(record["id"])),
+    )
+
+
+def split_records_for_strategy(
+    records: list[dict[str, Any]],
+    annotations_by_image: dict[int, list[dict[str, Any]]],
+    raw_id_to_label: dict[int, int],
+    class_count: int,
+    val_fraction: float,
+    test_fraction: float,
+    seed: int,
+    split_strategy: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    if split_strategy == "random":
+        return split_records(records, annotations_by_image, val_fraction, test_fraction, seed)
+    if split_strategy == "stratified":
+        return split_records_preserving_distribution(
+            records,
+            annotations_by_image,
+            raw_id_to_label,
+            class_count,
+            val_fraction,
+            test_fraction,
+            seed,
+        )
+    raise ValueError(f"Unknown split strategy: {split_strategy}")
 
 
 def summarize_record_distribution(
@@ -1935,12 +2035,15 @@ def run_cross_validation(
 
     for split_index in range(args.folds):
         split_seed = args.seed + split_index
-        train_records, val_records, test_records = split_records(
+        train_records, val_records, test_records = split_records_for_strategy(
             records,
             annotations_by_image,
+            raw_id_to_label,
+            len(class_names),
             args.val_fraction,
             args.test_fraction,
             split_seed,
+            args.split_strategy,
         )
         split_distribution = {
             "train": summarize_record_distribution(
@@ -1965,7 +2068,7 @@ def run_cross_validation(
         split_output_dir = args.output_dir / f"split{split_index + 1}"
         print(
             f"Split {split_index + 1}/{args.folds} "
-            f"(seed={split_seed}): "
+            f"(seed={split_seed}, strategy={args.split_strategy}): "
             f"{len(train_records)} train, {len(val_records)} val, {len(test_records)} test images"
         )
         if args.paper_score_eval_only:
@@ -2010,7 +2113,8 @@ def run_cross_validation(
         average_metrics = average_paper_score_metrics(completed) if completed else {}
         metric_stats = paper_score_metric_confidence_intervals(completed) if completed else {}
         cv_summary = {
-            "protocol": "repeated_random_80_10_10_splits",
+            "protocol": f"repeated_{args.split_strategy}_80_10_10_splits",
+            "split_strategy": args.split_strategy,
             "splits": args.folds,
             "val_fraction": args.val_fraction,
             "test_fraction": args.test_fraction,
@@ -2033,7 +2137,8 @@ def run_cross_validation(
     average_metrics = average_coco_metrics(completed) if completed else {}
     metric_stats = coco_metric_confidence_intervals(completed) if completed else {}
     cv_summary = {
-        "protocol": "repeated_random_80_10_10_splits",
+        "protocol": f"repeated_{args.split_strategy}_80_10_10_splits",
+        "split_strategy": args.split_strategy,
         "splits": args.folds,
         "val_fraction": args.val_fraction,
         "test_fraction": args.test_fraction,
@@ -2098,12 +2203,15 @@ def main() -> None:
         )
         return
 
-    train_records, val_records, test_records = split_records(
+    train_records, val_records, test_records = split_records_for_strategy(
         records,
         annotations_by_image,
+        raw_id_to_label,
+        len(class_names),
         args.val_fraction,
         args.test_fraction,
         args.seed,
+        args.split_strategy,
     )
     run_training_split(
         args,

@@ -222,7 +222,7 @@ ranking scores without retraining:
   --val-fraction 0.1 `
   --test-fraction 0.1 `
   --folds 10 `
-  --output-dir artifacts\taco\maskrcnn_taco10_repeated_80_10_10_coco_metrics
+  --output-dir artifacts\taco\maskrcnn_taco10_stratified_80_10_10_coco_metrics
 ```
 
 The default `training.device: auto` uses CUDA automatically when a GPU is
@@ -235,7 +235,7 @@ By default the script uses the paper-style TACO-10 taxonomy: `Bottle`,
 `Plastic bag + wrapper`, `Pop tab`, and `Straw`. Change `dataset.taxonomy` to
 `category-field` if you want to group categories by `dataset.category_field`
 instead. Outputs are saved under the configured `output.dir`, which defaults to
-`artifacts/taco/maskrcnn_taco10_repeated_80_10_10_coco_metrics`.
+`artifacts/taco/maskrcnn_taco10_stratified_80_10_10_coco_metrics`.
 
 Training augmentations are configured in `TACO/config.yaml`. The default setup
 uses horizontal flips, small rotations, object-centered random crops, brightness
@@ -253,12 +253,17 @@ cosine decay. This requires `pycocotools`, which is included in
 
 ### TACO Mask R-CNN Repeated-Split Results
 
-The default TACO protocol now repeats 10 random 80/10/10 train/validation/test
-splits over the full annotated dataset. Each run trains on roughly 80% of all
-TACO images, instead of first dividing the dataset into smaller fold partitions.
-The aggregate `cross_validation_summary.json` reports per-split results plus
-mean, standard deviation, and 95% confidence intervals under
-`coco_metric_stats`.
+The default TACO protocol now repeats 10 stratified 80/10/10
+train/validation/test splits over the full annotated dataset. Stratification
+uses each image's dominant TACO-10 class, so the train, validation, and test
+sets preserve the original dataset distribution more closely than a plain
+random split. Each run trains on roughly 80% of all TACO images, instead of
+first dividing the dataset into smaller fold partitions. The aggregate
+`cross_validation_summary.json` reports per-split results plus mean, standard
+deviation, and 95% confidence intervals under `coco_metric_stats`.
+
+Use `--split-strategy random` to reproduce the earlier repeated random split
+behavior.
 
 Older saved runs under `artifacts/taco/maskrcnn_taco10_cv_*` used a different
 procedure: the dataset was split into four partitions first, then each model
