@@ -308,6 +308,14 @@ def parse_args(config: Config, config_path: Path) -> argparse.Namespace:
         default="best_model.pth",
         help="Checkpoint filename to load inside each split directory for --paper-score-eval-only.",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Resume repeated-split runs by skipping splits with saved metrics, "
+            "evaluating saved checkpoints without metrics, and training missing splits."
+        ),
+    )
     parser.add_argument("--no-pretrained", action="store_true")
     parser.add_argument("--check-only", action="store_true")
     return parser.parse_args()
@@ -1798,6 +1806,99 @@ def run_paper_score_evaluation_split(
     }
 
 
+def load_completed_coco_split(output_dir: Path) -> dict[str, Any] | None:
+    metrics_path = output_dir / "coco_metrics.json"
+    if not metrics_path.is_file():
+        return None
+
+    coco_metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+    history_path = output_dir / "history.json"
+    test_metrics_path = output_dir / "test_metrics.json"
+    history = json.loads(history_path.read_text(encoding="utf-8")) if history_path.is_file() else {}
+    test_metrics = (
+        json.loads(test_metrics_path.read_text(encoding="utf-8"))
+        if test_metrics_path.is_file()
+        else {}
+    )
+    val_losses = history.get("val_loss", [])
+    val_mask_aps = history.get("val_mask_ap", [])
+    return {
+        "output_dir": str(output_dir),
+        "epochs_ran": len(history.get("loss", [])),
+        "best_val_loss": float(min(val_losses)) if val_losses else None,
+        "best_val_mask_ap": float(max(val_mask_aps)) if val_mask_aps else None,
+        "test_loss": (
+            float(test_metrics["loss"])
+            if isinstance(test_metrics.get("loss"), int | float)
+            else None
+        ),
+        "coco_metrics": coco_metrics,
+        "resumed_from": "coco_metrics",
+    }
+
+
+def run_coco_checkpoint_evaluation_split(
+    args: argparse.Namespace,
+    config: Config,
+    dataset_dir: Path,
+    annotations_by_image: dict[int, list[dict[str, Any]]],
+    raw_id_to_label: dict[int, int],
+    class_names: list[str],
+    test_records: list[dict[str, Any]],
+    output_dir: Path,
+    device: torch.device,
+    split_name: str,
+) -> dict[str, Any]:
+    checkpoint_path = output_dir / args.checkpoint_name
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(f"Could not find checkpoint for {split_name}: {checkpoint_path}")
+
+    test_dataset = make_taco_dataset(
+        test_records,
+        annotations_by_image,
+        raw_id_to_label,
+        dataset_dir,
+        config,
+        train=False,
+    )
+    test_loader = make_loader(test_dataset, args.batch_size, shuffle=False, workers=args.workers)
+    model = build_model(
+        num_classes=len(class_names),
+        pretrained=False,
+        weights_name=None,
+    ).to(device)
+    model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+
+    print(f"{split_name} resume evaluation using {checkpoint_path}")
+    test_loss = evaluate_loss(model, test_loader, device)
+    coco_metrics = evaluate_coco_metrics(
+        model,
+        test_loader,
+        test_records,
+        annotations_by_image,
+        raw_id_to_label,
+        class_names,
+        output_dir,
+        device,
+        args.evaluation_score_threshold,
+    )
+    (output_dir / "test_metrics.json").write_text(
+        json.dumps({"loss": float(test_loss), "coco": coco_metrics}, indent=2),
+        encoding="utf-8",
+    )
+    save_sample_predictions(model, test_loader, class_names, output_dir, device)
+    print(f"{split_name} test loss: {test_loss:.4f}")
+    print(f"{split_name} mask AP: {coco_metrics['segm']['AP']:.4f}")
+    print(f"{split_name} mask AP50: {coco_metrics['segm']['AP50']:.4f}")
+    print(f"{split_name} mask AP75: {coco_metrics['segm']['AP75']:.4f}")
+
+    completed = load_completed_coco_split(output_dir)
+    if completed is None:
+        raise RuntimeError(f"Resume evaluation did not write metrics for {split_name}.")
+    completed["resumed_from"] = "checkpoint"
+    return completed
+
+
 def build_warmup_cosine_scheduler(
     optimizer: torch.optim.Optimizer,
     epochs: int,
@@ -2085,20 +2186,38 @@ def run_cross_validation(
                 split_name=f"split {split_index + 1}",
             )
         else:
-            summary = run_training_split(
-                args,
-                config,
-                dataset_dir,
-                annotations_by_image,
-                raw_id_to_label,
-                class_names,
-                train_records,
-                val_records,
-                test_records,
-                split_output_dir,
-                device,
-                split_name=f"split {split_index + 1}",
-            )
+            completed_summary = load_completed_coco_split(split_output_dir) if args.resume else None
+            if completed_summary is not None:
+                print(f"split {split_index + 1} already has COCO metrics; skipping.")
+                summary = completed_summary
+            elif args.resume and (split_output_dir / args.checkpoint_name).is_file() and not args.check_only:
+                summary = run_coco_checkpoint_evaluation_split(
+                    args,
+                    config,
+                    dataset_dir,
+                    annotations_by_image,
+                    raw_id_to_label,
+                    class_names,
+                    test_records,
+                    split_output_dir,
+                    device,
+                    split_name=f"split {split_index + 1}",
+                )
+            else:
+                summary = run_training_split(
+                    args,
+                    config,
+                    dataset_dir,
+                    annotations_by_image,
+                    raw_id_to_label,
+                    class_names,
+                    train_records,
+                    val_records,
+                    test_records,
+                    split_output_dir,
+                    device,
+                    split_name=f"split {split_index + 1}",
+                )
         summary.update(
             {
                 "split": split_index + 1,
@@ -2115,6 +2234,7 @@ def run_cross_validation(
         cv_summary = {
             "protocol": f"repeated_{args.split_strategy}_80_10_10_splits",
             "split_strategy": args.split_strategy,
+            "resume": args.resume,
             "splits": args.folds,
             "val_fraction": args.val_fraction,
             "test_fraction": args.test_fraction,
@@ -2139,6 +2259,7 @@ def run_cross_validation(
     cv_summary = {
         "protocol": f"repeated_{args.split_strategy}_80_10_10_splits",
         "split_strategy": args.split_strategy,
+        "resume": args.resume,
         "splits": args.folds,
         "val_fraction": args.val_fraction,
         "test_fraction": args.test_fraction,

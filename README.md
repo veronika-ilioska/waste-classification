@@ -212,6 +212,12 @@ Train Mask R-CNN:
 .\.venv\Scripts\python.exe TACO\train_taco_maskrcnn.py
 ```
 
+Resume an interrupted repeated-split run without retraining completed splits:
+
+```powershell
+.\.venv\Scripts\python.exe TACO\train_taco_maskrcnn.py --resume
+```
+
 Evaluate saved repeated-split checkpoints with the TACO paper's prediction
 ranking scores without retraining:
 
