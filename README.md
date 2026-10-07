@@ -271,6 +271,23 @@ deviation, and 95% confidence intervals under `coco_metric_stats`.
 Use `--split-strategy random` to reproduce the earlier repeated random split
 behavior.
 
+#### COCO-Style Evaluation
+
+The corrected full-dataset 80/10/10 runs are saved under
+[`artifacts/taco/maskrcnn_taco10_repeated_80_10_10_coco_metrics`](artifacts/taco/maskrcnn_taco10_repeated_80_10_10_coco_metrics)
+for plain random splits and
+[`artifacts/taco/maskrcnn_taco10_stratified_80_10_10_coco_metrics`](artifacts/taco/maskrcnn_taco10_stratified_80_10_10_coco_metrics)
+for dominant-class stratified splits.
+
+| Split strategy | Splits | Mask AP | Bbox AP | Notes |
+|---|---:|---:|---:|---|
+| Random 80/10/10 | 10 | **26.52 +/- 2.26** | **26.52 +/- 2.15** | Best COCO-style result. |
+| Stratified 80/10/10 | 10 | 25.70 +/- 4.48 | 25.49 +/- 4.46 | Preserves dominant-class image distribution. |
+
+Both corrected protocols train each model on about 1,200 images per split,
+instead of the roughly 299-image training subsets used by the older 4-way
+partitioned experiments.
+
 Older saved runs under `artifacts/taco/maskrcnn_taco10_cv_*` used a different
 procedure: the dataset was split into four partitions first, then each model
 used 80/10/10 inside one partition. Those artifacts are retained for reference,
@@ -284,16 +301,16 @@ three prediction-ranking scores: class score, litter score, and ratio score.
 The aggregate values are written to `paper_score_summary.json` in the selected
 output directory.
 
-| Evaluation | Paper Mask AP |
-|---|---:|
-| Class score | 17.6 +/- 1.6 |
-| Litter score | 18.4 +/- 1.5 |
-| Ratio score | **19.4 +/- 1.5** |
+| Evaluation |   Paper Mask AP | Random 80/10/10 Mask AP | Stratified 80/10/10 Mask AP | Stratified vs paper |
+|---|----------------:|---:|---:|---:|
+| Class score |    17.6 +/- 1.6 | 23.42 +/- 2.56 | **24.67 +/- 1.68** | +7.07 |
+| Litter score |    18.4 +/- 1.5 | 23.80 +/- 2.84 | **25.28 +/- 1.56** | +6.88 |
+| Ratio score |    19.4 +/- 1.5 | 24.12 +/- 2.78 | **25.57 +/- 1.69** | +6.17 |
 
-Repository values should be filled from the new repeated-split artifacts after
-the corrected protocol is rerun. The older repository values from the 4-way
-partitioned experiment are no longer listed here because they used much smaller
-training sets and should not be compared directly with the paper.
+Both corrected 80/10/10 protocols improve over the paper on all three
+paper-style ranking scores. The strongest repository result is the stratified
+ratio score at 25.57 AP, and the stratified split also has narrower 95%
+confidence intervals than the plain random split for these paper-style scores.
 
 ## EcoDetect Model Comparison
 
