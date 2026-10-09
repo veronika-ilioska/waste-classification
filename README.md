@@ -259,6 +259,33 @@ cosine decay. This requires `pycocotools`, which is included in
 
 ### TACO Mask R-CNN Repeated-Split Results
 
+#### Instance IoU (no retraining)
+
+Calculate mask and bounding-box IoU directly from the saved test predictions:
+
+```powershell
+.\.venv\Scripts\python.exe TACO\iou_metrics.py --output-dir artifacts\taco\maskrcnn_taco10_stratified_80_10_10_coco_metrics
+```
+
+This requires the `coco_test_ground_truth.json` and `coco_test_predictions.json`
+exports in each `split*` directory, but no model checkpoint, GPU, or original
+images. A single split directory is also supported. Outputs are per-split
+`iou_metrics.json` (including each class) and aggregate `iou_summary.json`.
+New training/evaluation runs also write `iou_metrics.json` automatically.
+
+IoU is intersection area divided by union area. This report retains predictions
+with confidence >= 0.5 (`--score-threshold` overrides this for saved exports),
+then matches same-class objects one-to-one in descending confidence order at
+IoU >= 0.5. Masks use the existing 0.5 probability threshold. Mask and box
+matching are independent; crowd/ignored annotations are excluded.
+`matched_mean_iou` averages only matched objects; `gt_mean_iou` assigns zero
+to unmatched ground-truth objects. Recall and precision at IoU 0.5 provide
+context for missed objects and false detections. Undefined averages are null.
+These instance statistics are not semantic-segmentation mIoU or COCO AP.
+The summary reports equal-weight split means and sample standard deviations.
+Confidence thresholds below the original export cutoff cannot restore omitted
+predictions. Automatic evaluation uses the larger of 0.5 and its export cutoff.
+
 The default TACO protocol now repeats 10 stratified 80/10/10
 train/validation/test splits over the full annotated dataset. Stratification
 uses each image's dominant TACO-10 class, so the train, validation, and test

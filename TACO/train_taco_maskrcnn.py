@@ -1508,6 +1508,16 @@ def evaluate_coco_metrics(
     predictions = collect_coco_predictions(model, test_loader, device, score_threshold)
     predictions_path.write_text(json.dumps(predictions), encoding="utf-8")
 
+    # Fixed-confidence instance IoU complements the confidence-swept COCO AP.
+    from iou_metrics import evaluate_instance_iou
+
+    iou_report = evaluate_instance_iou(
+        ground_truth_path, predictions_path, score_threshold=max(0.5, score_threshold)
+    )
+    (output_dir / "iou_metrics.json").write_text(
+        json.dumps(iou_report, indent=2), encoding="utf-8"
+    )
+
     metrics = {
         "segm": run_coco_eval(ground_truth_path, predictions_path, "segm"),
         "bbox": run_coco_eval(ground_truth_path, predictions_path, "bbox"),
