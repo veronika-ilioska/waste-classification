@@ -259,7 +259,40 @@ cosine decay. This requires `pycocotools`, which is included in
 
 ### TACO Mask R-CNN Repeated-Split Results
 
+#### Segmentation Examples
+
+Examples from the stratified run's split-1 test set. Each image shows the
+**original photo (left), human-annotated ground truth (middle), and model
+predictions (right)**. Predicted masks are displayed at confidence >= 50%;
+the percentages beside labels are confidence scores, not IoU.
+
+**Packaging:** an example of an `Other Litter` prediction matching the annotated object.
+
+![TACO packaging: original, ground-truth mask, and predicted mask](docs/images/taco/image_00048.jpg)
+
+**Litter in vegetation:** a thin object with a more complex outline.
+
+![TACO litter in vegetation: original, ground-truth mask, and predicted mask](docs/images/taco/image_00561.jpg)
+
+**Multiple wrappers:** a harder example with extra, overlapping predictions.
+
+![TACO wrappers: three annotated instances compared with eight predictions](docs/images/taco/image_00245.jpg)
+
 #### Instance IoU (no retraining)
+
+To create segmentation comparison images from saved test predictions:
+
+```powershell
+.\.venv\Scripts\python.exe TACO\visualize_predictions.py --run-dir artifacts\taco\maskrcnn_taco10_stratified_80_10_10_coco_metrics\split1 --count 8
+```
+
+Images are saved in that split's `segmentation_images` directory. Each shows
+the original, annotated masks, and predicted instance masks with class labels
+and confidence scores. Selection is random with a fixed seed, including images
+with no detections. Use `--seed` for different examples, `--count` for more,
+`--dataset-dir` for another TACO image location, and `--score-threshold` to
+change the displayed confidence cutoff (default 0.5). No GPU or retraining is
+needed; the original images and saved test JSON exports are required.
 
 Calculate mask and bounding-box IoU directly from the saved test predictions:
 
