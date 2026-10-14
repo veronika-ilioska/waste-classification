@@ -236,12 +236,18 @@ available and falls back to CPU otherwise. In Colab, enable a GPU under
 `Runtime > Change runtime type`, then run the script normally or force CUDA with
 `--device cuda`.
 
-By default the script uses the paper-style TACO-10 taxonomy: `Bottle`,
+The current default experiment uses every original TACO category (`taxonomy:
+category-field`, `category_field: name`) with 10 randomized 80/10/10
+train/validation/test splits, using seeds 42 through 51. The model's class list
+includes all dataset categories plus background; rare categories may be absent
+from individual subsets. Run the training command above to start this experiment.
+Its outputs are saved separately under
+`artifacts/taco/maskrcnn_all_classes_random_80_10_10_coco_metrics`.
+
+The previous experiments used the paper-style TACO-10 taxonomy: `Bottle`,
 `Bottle cap`, `Can`, `Cigarette`, `Cup`, `Lid`, `Other Litter`,
-`Plastic bag + wrapper`, `Pop tab`, and `Straw`. Change `dataset.taxonomy` to
-`category-field` if you want to group categories by `dataset.category_field`
-instead. Outputs are saved under the configured `output.dir`, which defaults to
-`artifacts/taco/maskrcnn_taco10_stratified_80_10_10_coco_metrics`.
+`Plastic bag + wrapper`, `Pop tab`, and `Straw`. Use `--taxonomy taco10` to
+select that grouping again, with a separate `--output-dir` for those runs.
 
 Training augmentations are configured in `TACO/config.yaml`. The default setup
 uses horizontal flips, small rotations, object-centered random crops, brightness
@@ -319,7 +325,7 @@ The summary reports equal-weight split means and sample standard deviations.
 Confidence thresholds below the original export cutoff cannot restore omitted
 predictions. Automatic evaluation uses the larger of 0.5 and its export cutoff.
 
-The default TACO protocol now repeats 10 stratified 80/10/10
+The previous stratified TACO protocol repeats 10 stratified 80/10/10
 train/validation/test splits over the full annotated dataset. Stratification
 uses each image's dominant TACO-10 class, so the train, validation, and test
 sets preserve the original dataset distribution more closely than a plain

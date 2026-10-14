@@ -5,11 +5,11 @@ dataset:
     - .jpg
     - .jpeg
     - .png
-  taxonomy: taco10
-  category_field: supercategory
+  taxonomy: category-field
+  category_field: name
 
 output:
-  dir: artifacts/taco/maskrcnn_taco10_stratified_80_10_10_coco_metrics
+  dir: artifacts/taco/maskrcnn_all_classes_random_80_10_10_coco_metrics
 
 model:
   pretrained: true
@@ -26,7 +26,7 @@ training:
   val_fraction: 0.1
   test_fraction: 0.1
   patience: 5
-  split_strategy: stratified
+  split_strategy: random
   device: auto
 
 augmentation:
