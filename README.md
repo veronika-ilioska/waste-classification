@@ -378,6 +378,84 @@ paper-style ranking scores. The strongest repository result is the stratified
 ratio score at 25.57 AP, and the stratified split also has narrower 95%
 confidence intervals than the plain random split for these paper-style scores.
 
+## ZeroWaste Mask R-CNN
+
+Uses torchvision Mask R-CNN ResNet-50/FPN (the same architecture as the TACO
+experiment), initialized from COCO weights with new box and mask predictors.
+Labels: background, rigid_plastic, cardboard, metal, soft_plastic.
+This is a new ZeroWaste model; existing TACO checkpoints are not overwritten.
+
+### Run the Python script on cuda4
+
+Push the `ZeroWaste` code folder through Git and pull it into your server
+checkout. Transfer `zerowaste-f-final.zip` separately; do not commit the dataset.
+Use your university's GPU allocation or job submission procedure before running
+the commands below. Activate a Python environment containing CUDA-enabled
+PyTorch, torchvision, numpy, pillow, and pycocotools.
+
+From the repository root on the server:
+
+```bash
+python -c "import torch; print(torch.cuda.is_available())"
+## Extract once and verify one training step (adjust the ZIP path if needed).
+python ZeroWaste/train_maskrcnn.py --archive ~/zerowaste-f-final.zip --check-only --device cuda
+## Train, select the best validation checkpoint, and evaluate on the test split.
+python -u ZeroWaste/train_maskrcnn.py --device cuda --epochs 30 --batch-size 2
+```
+
+If already extracted, omit `--archive`. Use `--data /path/to/splits_final_deblurred`
+on both script commands if the dataset is stored elsewhere. Results are saved
+under `artifacts/zerowaste/maskrcnn` by default; use `--output` to change this.
+If GPU memory runs out, set `--batch-size 1`.
+The defaults (30 epochs, SGD, horizontal flips, validation AP
+early stopping after 7 unimproved epochs) are a starting configuration, not a
+claim of optimal hyperparameters or reproduction of the paper.
+
+### Local commands
+
+From the repository root, verify loading, one optimizer step, and inference:
+
+```powershell
+.\.venv\Scripts\python.exe ZeroWaste\train_maskrcnn.py --check-only
+```
+
+If the archive has not been extracted, add
+`--archive C:\Users\ilios\Downloads\zerowaste-f-final.zip`.
+The check uses random weights and reduced resolution, downloads no weights,
+and is not a trained-model evaluation.
+
+On a machine with CUDA-enabled PyTorch and a supported GPU:
+
+```powershell
+python ZeroWaste/train_maskrcnn.py --device cuda --epochs 30 --batch-size 2
+```
+
+Official splits are used without random repartitioning: 3,002 training images,
+572 validation images, 929 test images. Each epoch evaluates validation COCO
+mask AP; only the best validation checkpoint is evaluated on the test set at
+the end. Test data never selects the epoch. Empty images are retained.
+Annotation IDs are renumbered from 1 for correct COCO matching.
+
+Outputs include `best_model.pth`, `best_epoch.json`, `labels.json`,
+`config.json`, `history.json`, and `test/metrics.json` plus COCO predictions.
+Metrics include box and mask AP@[.50:.95], AP50, AP75, size-specific AP, and AR.
+AP values are fractions; multiply by 100 for percentages. A value of -1 means
+that metric is unavailable. Evaluation uses up to 100 detections per image
+and a 0.001 confidence floor. Mask probability threshold is 0.5.
+
+Evaluate an existing ZeroWaste checkpoint separately:
+
+```powershell
+python ZeroWaste/train_maskrcnn.py --evaluate artifacts/zerowaste/maskrcnn/best_model.pth --output artifacts/zerowaste/reevaluation
+```
+
+Training refuses an output folder containing an existing best checkpoint to
+avoid overwriting it. Interrupted training cannot yet resume optimizer state;
+choose a new output folder to restart. A completed best checkpoint can still
+be evaluated with `--evaluate`.
+
+Dataset: https://ai.bu.edu/zerowaste/ (CC BY-NC 4.0).
+
 ## EcoDetect Model Comparison
 
 The EcoDetect runs include image-level MobileNet classifiers and a YOLOv11
